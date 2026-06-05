@@ -1,0 +1,286 @@
+# =============================================================================
+# KLZ FinOps Accelerator — Enterprise Baseline (agent-runtime policy)
+# =============================================================================
+# Forked from:  microsoft/agent-governance-toolkit
+#               agent-governance-python/agent-os/templates/policies/enterprise.yaml
+# Commit:       6f94b69f4c524f5c87227db0609e3d28deba7fb7
+# Upstream:     MIT License (c) Microsoft Corporation
+#
+# KLZ deltas vs upstream:
+#   * policies[network_restrictions].allow.domains: REPLACED with KLZ domain set
+#     (Azure-private endpoints + APIM only; no public AI URLs)
+#   * policies[cost_controls].limits.max_cost_per_day_usd: 100 -> 25 (matches
+#     cost-controls.yaml daily cap for the dev ring)
+#   * integrations.observability.opentelemetry.endpoint: REPLACED with env-var
+#     pointer (operator wires to App Insights from Phase A.5b)
+#   * audit.export.destinations: REPLACED upstream syslog/webhook placeholders
+#     with KLZ-specific App Insights / LAW destinations
+#   * notifications.channels: kept upstream env-var placeholder pattern
+# =============================================================================
+
+kernel:
+  version: "1.0"
+  mode: strict
+  template: enterprise
+
+description: |
+  KLZ-customized enterprise governance baseline for AI agents.
+  Comprehensive controls for security, compliance, audit, rate-limiting,
+  and multi-level approval workflows. Inherited by every agent that
+  onboards through the KLZ landing zone.
+
+signals:
+  enabled:
+    - SIGSTOP   # Pause for human review
+    - SIGKILL   # Terminate on violation
+    - SIGCONT   # Resume after approval
+    - SIGUSR1   # Custom: escalate to security team
+    - SIGUSR2   # Custom: request manager approval
+
+policies:
+  # ============================================
+  # SECURITY POLICIES
+  # ============================================
+
+  - name: destructive_operations
+    description: Block all destructive operations
+    severity: critical
+    category: security
+    deny:
+      - action: database_write
+        operations: [DROP, TRUNCATE, DELETE]
+      - action: file_delete
+        paths: ["/**"]
+      - action: shell_exec
+        commands: ["rm", "del", "format"]
+    action: SIGKILL
+    requires_approval: true
+    approval_level: security_team
+
+  - name: credential_protection
+    description: Prevent credential exposure
+    severity: critical
+    category: security
+    deny:
+      - patterns:
+          - '(?i)(password|api[_-]?key|secret|token)\s*[:=]\s*["''][^"'']+["'']'
+          - 'sk-[A-Za-z0-9]{32,}'
+          - 'ghp_[A-Za-z0-9]{36}'
+          - 'AKIA[A-Z0-9]{16}'
+    action: SIGKILL
+
+  - name: network_restrictions
+    description: Control network access (KLZ — APIM gateway + Azure-private endpoints only)
+    severity: high
+    category: security
+    allow:
+      - action: http_request
+        domains:
+          - "*.azure-api.net"             # KLZ APIM gateway (any environment)
+          - "*.cognitiveservices.azure.com"
+          - "*.openai.azure.com"
+          - "*.blob.core.windows.net"     # Agent state / cost-tracking storage
+    deny:
+      - action: http_request
+        domains: ["*"]
+    action: SIGSTOP
+    message: "Network request to unapproved domain (KLZ requires APIM)"
+
+  # ============================================
+  # COMPLIANCE POLICIES
+  # ============================================
+
+  - name: pii_protection
+    description: Protect personally identifiable information
+    severity: critical
+    category: compliance
+    scope: [input, output]
+    deny:
+      - patterns:
+          - '\b\d{3}-\d{2}-\d{4}\b'                # SSN
+          - '\b(?:4[0-9]{12}(?:[0-9]{3})?)\b'      # Credit card (Visa)
+    action: SIGKILL
+    audit: always
+
+  - name: data_residency
+    description: Ensure data stays in approved Azure regions
+    severity: high
+    category: compliance
+    deny:
+      - action: http_request
+        regions_excluded:
+          - "CN"
+          - "RU"
+    action: SIGKILL
+
+  - name: retention_policy
+    description: Enforce data retention rules
+    severity: medium
+    category: compliance
+    rules:
+      - data_type: "logs"
+        max_retention_days: 90
+      - data_type: "pii"
+        max_retention_days: 30
+      - data_type: "audit"
+        min_retention_days: 365
+
+  # ============================================
+  # OPERATIONAL POLICIES
+  # ============================================
+
+  - name: rate_limiting
+    description: Prevent resource abuse
+    severity: medium
+    category: operational
+    limits:
+      - action: llm_call
+        max_per_minute: 60
+        max_per_hour: 1000
+      - action: database_query
+        max_per_minute: 100
+      - action: file_read
+        max_per_minute: 200
+    action: SIGSTOP
+    message: "Rate limit exceeded"
+
+  - name: cost_controls
+    description: Control AI spending (KLZ dev cap matches cost-controls.yaml)
+    severity: high
+    category: operational
+    limits:
+      - action: llm_call
+        max_tokens_per_call: 4000
+        max_cost_per_day_usd: 25
+    action: SIGSTOP
+    escalate_to: finance_team
+
+  - name: resource_limits
+    description: Prevent resource exhaustion
+    severity: high
+    category: operational
+    limits:
+      - memory_mb: 1024
+      - cpu_percent: 80
+      - disk_write_mb: 100
+    action: SIGSTOP
+
+  # ============================================
+  # APPROVAL WORKFLOWS (SoD tiers)
+  # ============================================
+
+  - name: high_risk_operations
+    description: Require approval for high-risk operations
+    severity: high
+    category: workflow
+    requires_approval:
+      - action: database_write
+        scope: production
+        approval_level: dba_team
+      - action: deploy
+        approval_level: release_manager
+      - action: user_data_access
+        approval_level: privacy_officer
+    timeout_minutes: 30
+    action: SIGSTOP
+
+# ============================================
+# AUDIT CONFIGURATION
+# ============================================
+
+audit:
+  enabled: true
+  log_path: "./logs/klz/enterprise-audit.log"
+  include:
+    - all_actions
+    - policy_checks
+    - signals
+    - approvals
+    - denials
+
+  format: json
+  fields:
+    - timestamp
+    - agent_id
+    - action
+    - policy
+    - result
+    - user
+    - session_id
+    - correlation_id     # W3C trace context — matches APIM diagnostic (Phase A.5b)
+
+  retention_days: 365
+
+  # KLZ: ship audit events to the same Log Analytics workspace + App Insights
+  # that APIM diagnostics already populate (Phase A.5/A.5b).
+  export:
+    enabled: true
+    destinations:
+      - type: opentelemetry
+        endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+        protocol: grpc
+        # Operator: wire OTEL_EXPORTER_OTLP_ENDPOINT to either the in-cluster
+        # OpenTelemetry Collector forwarding to App Insights, or directly to
+        # Azure Monitor OTLP ingestion.
+      - type: log_analytics
+        workspace_id: "${LOG_ANALYTICS_WORKSPACE_ID}"
+        shared_key: "${LOG_ANALYTICS_SHARED_KEY}"
+        log_type: "KlzAgentAudit_CL"
+
+# ============================================
+# NOTIFICATIONS
+# ============================================
+
+notifications:
+  channels:
+    - name: security_team
+      type: slack
+      webhook: "${SLACK_SECURITY_WEBHOOK}"
+      events: [SIGKILL, credential_exposure, pii_detection]
+
+    - name: ops_team
+      type: pagerduty
+      routing_key: "${PAGERDUTY_KEY}"
+      events: [rate_limit_exceeded, resource_exhaustion]
+
+    - name: compliance
+      type: email
+      recipients: ["${COMPLIANCE_EMAIL}"]
+      events: [pii_detection, data_residency_violation]
+
+  escalation:
+    - level: 1
+      delay_minutes: 0
+      notify: [security_team]
+    - level: 2
+      delay_minutes: 15
+      notify: [ops_team, security_team]
+    - level: 3
+      delay_minutes: 30
+      notify: ["${CISO_EMAIL}"]
+
+# ============================================
+# INTEGRATION
+# ============================================
+
+integrations:
+  sso:
+    enabled: true
+    provider: entra        # KLZ: Entra ID (upstream had Okta as default)
+    required_groups:
+      - "klz-agent-users"
+      - "klz-agent-developers"
+
+  secrets_manager:
+    enabled: true
+    provider: key_vault    # KLZ: Azure Key Vault (upstream had HashiCorp Vault)
+    path: "klz-agent-os"
+
+  observability:
+    prometheus:
+      enabled: true
+      port: 9090
+    opentelemetry:
+      enabled: true
+      endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+      protocol: grpc

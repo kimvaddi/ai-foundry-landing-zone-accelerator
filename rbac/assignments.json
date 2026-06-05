@@ -1,0 +1,104 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "9585191611746043167"
+    }
+  },
+  "parameters": {
+    "foundryAccountId": {
+      "type": "string",
+      "metadata": {
+        "description": "Foundry account resource ID (output of main.bicep)."
+      }
+    },
+    "searchServiceId": {
+      "type": "string",
+      "metadata": {
+        "description": "AI Search resource ID (output of main.bicep)."
+      }
+    },
+    "apimPrincipalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "AAD object ID of the APIM managed identity, if APIM is deployed."
+      }
+    },
+    "appRuntimePrincipalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "AAD object ID of an app/runtime managed identity that needs to call Foundry."
+      }
+    },
+    "agentAuditDcrId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource ID of the agent-audit DCR (output of finops module). Required if appRuntimePrincipalId is set; grants Monitoring Metrics Publisher so the runtime client can ingest into KlzAgentAudit_CL."
+      }
+    }
+  },
+  "variables": {
+    "cogServicesUserRole": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')]",
+    "cogServicesOpenAiUserRole": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]",
+    "searchIndexDataReader": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '1407120a-92aa-4202-b7e9-c0e197c71c8f')]",
+    "monitoringMetricsPublisher": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '3913510d-42f4-4e42-8a64-420c390055eb')]"
+  },
+  "resources": [
+    {
+      "condition": "[not(empty(parameters('apimPrincipalId')))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(parameters('foundryAccountId'), parameters('apimPrincipalId'), 'cogsvc-openai-user')]",
+      "properties": {
+        "principalId": "[parameters('apimPrincipalId')]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[variables('cogServicesOpenAiUserRole')]"
+      }
+    },
+    {
+      "condition": "[not(empty(parameters('appRuntimePrincipalId')))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(parameters('foundryAccountId'), parameters('appRuntimePrincipalId'), 'cogsvc-user')]",
+      "properties": {
+        "principalId": "[parameters('appRuntimePrincipalId')]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[variables('cogServicesUserRole')]"
+      }
+    },
+    {
+      "condition": "[not(empty(parameters('appRuntimePrincipalId')))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(parameters('searchServiceId'), parameters('appRuntimePrincipalId'), 'search-data-reader')]",
+      "properties": {
+        "principalId": "[parameters('appRuntimePrincipalId')]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[variables('searchIndexDataReader')]"
+      }
+    },
+    {
+      "condition": "[and(not(empty(parameters('appRuntimePrincipalId'))), not(empty(parameters('agentAuditDcrId'))))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(parameters('agentAuditDcrId'), parameters('appRuntimePrincipalId'), 'monitoring-metrics-publisher')]",
+      "properties": {
+        "principalId": "[parameters('appRuntimePrincipalId')]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[variables('monitoringMetricsPublisher')]"
+      }
+    }
+  ],
+  "outputs": {
+    "assignmentCount": {
+      "type": "int",
+      "value": "[add(add(if(empty(parameters('apimPrincipalId')), 0, 1), if(empty(parameters('appRuntimePrincipalId')), 0, 2)), if(and(not(empty(parameters('appRuntimePrincipalId'))), not(empty(parameters('agentAuditDcrId')))), 1, 0))]"
+    }
+  }
+}

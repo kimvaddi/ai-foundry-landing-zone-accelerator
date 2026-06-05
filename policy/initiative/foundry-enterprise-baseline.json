@@ -1,0 +1,138 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-09-01/policySetDefinition.json#",
+  "properties": {
+    "policyType": "Custom",
+    "displayName": "Foundry Enterprise Baseline",
+    "description": "Enterprise baseline for Microsoft Foundry / Azure AI Services. Bundles built-ins (Cognitive Services local-auth, MI, public-network, diagnostic-to-LAW, approved regions; AI Search; Key Vault) and KLZ custom policies (per-tag presence, model allowlist, private-only, Defender for AI AINE). Tag policy is referenced once per required tag.",
+    "metadata": {
+      "category": "AI Services",
+      "version": "2.0.0",
+      "source": "klz-accelerator-finops"
+    },
+    "parameters": {
+      "logAnalyticsWorkspaceId": {
+        "type": "String",
+        "metadata": { "displayName": "Workspace for diagnostic settings", "strongType": "Microsoft.OperationalInsights/workspaces" }
+      },
+      "approvedLocations": {
+        "type": "Array",
+        "defaultValue": [ "eastus", "eastus2", "westus2", "westus3", "swedencentral" ],
+        "metadata": { "displayName": "Approved Azure regions" }
+      },
+      "allowedModels": {
+        "type": "Array",
+        "defaultValue": [ "gpt-4o", "gpt-4o-mini", "o3-mini", "text-embedding-3-large", "text-embedding-3-small" ],
+        "metadata": { "displayName": "Allowed Cognitive Services model names" }
+      },
+      "effect": {
+        "type": "String",
+        "defaultValue": "Audit",
+        "allowedValues": [ "Audit", "Deny", "Disabled" ],
+        "metadata": { "displayName": "Effect for new resource rules" }
+      }
+    },
+    "policyDefinitions": [
+      {
+        "policyDefinitionReferenceId": "cogsvc-disable-local-auth",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/71ef260a-8f18-47b7-abcb-62d0673d94dc",
+        "parameters": { "effect": { "value": "[parameters('effect')]" } }
+      },
+      {
+        "policyDefinitionReferenceId": "cogsvc-managed-identity",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/fe3fd216-4f83-4fc1-8984-2bbec80a3418",
+        "parameters": { "effect": { "value": "Audit" } }
+      },
+      {
+        "policyDefinitionReferenceId": "cogsvc-diagnostic-to-law",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/55d1f543-d1b0-4811-9663-d6d0dbc6326d",
+        "parameters": {
+          "effect": { "value": "DeployIfNotExists" },
+          "categoryGroup": { "value": "allLogs" },
+          "logAnalytics": { "value": "[parameters('logAnalyticsWorkspaceId')]" }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "deny-non-approved-region",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/e56962a6-4747-49cd-b67b-bf8b01975c4c",
+        "parameters": {
+          "listOfAllowedLocations": { "value": "[parameters('approvedLocations')]" }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "kv-require-soft-delete",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/1e66c121-a66a-4b1f-9b83-0fd99bf0fc2d"
+      },
+      {
+        "policyDefinitionReferenceId": "kv-require-purge-protection",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/0b60c0b2-2dc2-4e1c-b5c9-abbed971de53"
+      },
+      {
+        "policyDefinitionReferenceId": "search-disable-local-auth",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/6300012e-e9a4-4649-b41f-a85f5c43be91",
+        "parameters": { "effect": { "value": "[parameters('effect')]" } }
+      },
+      {
+        "policyDefinitionReferenceId": "search-diagnostic-to-law",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/08ba64b8-738f-4918-9686-730d2ed79c7d",
+        "parameters": {
+          "effect": { "value": "DeployIfNotExists" },
+          "logAnalytics": { "value": "[parameters('logAnalyticsWorkspaceId')]" }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "require-tag-workload",
+        "policyDefinitionId": "/providers/Microsoft.Management/managementGroups/ai-landing-zone-test/providers/Microsoft.Authorization/policyDefinitions/klz-require-tags",
+        "parameters": {
+          "tagName": { "value": "workload" },
+          "effect":  { "value": "[parameters('effect')]" }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "require-tag-env",
+        "policyDefinitionId": "/providers/Microsoft.Management/managementGroups/ai-landing-zone-test/providers/Microsoft.Authorization/policyDefinitions/klz-require-tags",
+        "parameters": {
+          "tagName": { "value": "env" },
+          "effect":  { "value": "[parameters('effect')]" }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "require-tag-owner",
+        "policyDefinitionId": "/providers/Microsoft.Management/managementGroups/ai-landing-zone-test/providers/Microsoft.Authorization/policyDefinitions/klz-require-tags",
+        "parameters": {
+          "tagName": { "value": "owner" },
+          "effect":  { "value": "[parameters('effect')]" }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "require-tag-costCenter",
+        "policyDefinitionId": "/providers/Microsoft.Management/managementGroups/ai-landing-zone-test/providers/Microsoft.Authorization/policyDefinitions/klz-require-tags",
+        "parameters": {
+          "tagName": { "value": "costCenter" },
+          "effect":  { "value": "[parameters('effect')]" }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "cognitive-model-allowlist",
+        "policyDefinitionId": "/providers/Microsoft.Management/managementGroups/ai-landing-zone-test/providers/Microsoft.Authorization/policyDefinitions/klz-cognitive-model-allowlist",
+        "parameters": {
+          "allowedModels": { "value": "[parameters('allowedModels')]" },
+          "effect":        { "value": "[parameters('effect')]" }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "cognitive-private-only",
+        "policyDefinitionId": "/providers/Microsoft.Management/managementGroups/ai-landing-zone-test/providers/Microsoft.Authorization/policyDefinitions/klz-cognitive-private-only",
+        "parameters": {
+          "effect": { "value": "[parameters('effect')]" }
+        }
+      },
+      {
+        "policyDefinitionReferenceId": "defender-for-ai-dine",
+        "policyDefinitionId": "/providers/Microsoft.Management/managementGroups/ai-landing-zone-test/providers/Microsoft.Authorization/policyDefinitions/klz-defender-for-ai-dine",
+        "parameters": {
+          "effect": { "value": "AuditIfNotExists" }
+        }
+      }
+    ]
+  }
+}

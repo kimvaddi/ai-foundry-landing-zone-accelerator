@@ -1,0 +1,246 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - 'shared/**'
+      - 'scripts/**'
+      - 'docs/lint-baseline.md'
+      - '.tflint.hcl'
+      - '.trivy.yaml'
+      - '.trivy-secret.yaml'
+      - '.checkov.yaml'
+      - 'ps-rule.yaml'
+      - '.ps-rule/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # OIDC to Azure for `what-if`
+  pull-requests: write
+  checks: write
+
+env:
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  #--------------------------------------------------------------------------
+  # 1. Terraform fmt + tflint + validate + plan
+  #--------------------------------------------------------------------------
+  terraform:
+    name: Terraform (fmt + lint + plan)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    strategy:
+      fail-fast: false
+      matrix:
+        tfvars:
+          - parameters/full.tfvars
+          - parameters/stage-b-toggles.tfvars
+          - parameters/enterprise-hub-connected.sample.tfvars
+          - blueprints/smoke/smoke.tfvars
+          - blueprints/poc-standalone-spoke/poc-standalone-spoke.tfvars
+          - blueprints/poc-hub-connected/poc-hub-connected.tfvars
+          - blueprints/prod-standalone-with-fw/prod-standalone-with-fw.tfvars
+          - blueprints/prod-hub-connected/prod-hub-connected.tfvars
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+          terraform_wrapper: false
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive
+
+      - name: terraform init (no backend, lint-only)
+        run: terraform init -backend=false -input=false
+
+      - name: terraform validate
+        run: terraform validate -no-color
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.63.1
+
+      - name: tflint init
+        run: tflint --init
+
+      - name: tflint (recursive, baseline = 11 warnings, 0 errors)
+        run: |
+          tflint --recursive --format compact --minimum-failure-severity error
+          WARN_COUNT=$(tflint --recursive --format compact 2>&1 | grep -c 'Warning -' || true)
+          echo "::notice::tflint warnings = $WARN_COUNT (baseline = 11)"
+          if [ "$WARN_COUNT" -gt 11 ]; then
+            echo "::error::tflint warnings exceeded baseline (got $WARN_COUNT, baseline = 11). Update docs/lint-baseline.md."
+            exit 1
+          fi
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: terraform plan (${{ matrix.tfvars }})
+        env:
+          ARM_USE_OIDC: 'true'
+          ARM_CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          # Generate ephemeral ed25519 keypair for buildvm SSH (not committed).
+          ssh-keygen -t ed25519 -f /tmp/ci-key -N '' -q
+          SSHKEY=$(cat /tmp/ci-key.pub)
+          terraform plan \
+            -var-file="${{ matrix.tfvars }}" \
+            -var="subscription_id=${{ env.AZURE_SUBSCRIPTION_ID }}" \
+            -var="rg_suffix=-ci-${GITHUB_RUN_NUMBER}" \
+            -var="jumpvm_admin_password=$(openssl rand -base64 24)QA!" \
+            -var="buildvm_ssh_public_key=$SSHKEY" \
+            -lock=false -input=false -no-color -out=tfplan
+          terraform show -no-color tfplan | tail -50
+
+  #--------------------------------------------------------------------------
+  # 2. Bicep build + PSRule + what-if
+  #--------------------------------------------------------------------------
+  bicep:
+    name: Bicep (build + PSRule + what-if)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        bicepparam:
+          - infra/bicep/parameters/full.bicepparam
+          - infra/bicep/parameters/stage-b-toggles.bicepparam
+          - infra/bicep/blueprints/smoke/smoke.bicepparam
+          - infra/bicep/blueprints/poc-standalone-spoke/poc-standalone-spoke.bicepparam
+          - infra/bicep/blueprints/prod-hub-connected/prod-hub-connected.bicepparam
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: |
+          curl -Lo bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x bicep && sudo mv bicep /usr/local/bin/
+          bicep --version
+
+      - name: bicep build (main + ${{ matrix.bicepparam }})
+        run: |
+          mkdir -p out
+          bicep build infra/bicep/main.bicep --outfile out/main.json
+          bicep build-params "${{ matrix.bicepparam }}" --outfile out/$(basename "${{ matrix.bicepparam }}" .bicepparam).json
+
+      - uses: microsoft/ps-rule@v2.9.0
+        if: matrix.bicepparam == 'infra/bicep/parameters/full.bicepparam'  # PSRule runs once on the canonical template
+        with:
+          modules: PSRule.Rules.Azure
+          inputPath: 'infra/bicep/main.bicep'
+          option: 'ps-rule.yaml'
+          baseline: 'Azure.GA_2024_12'
+          outcome: 'Fail'
+        env:
+          PSRULE_AZURE_BICEP_PATH: '/usr/local/bin/bicep'
+          PSRULE_AZURE_BICEP_FILE_EXPANSION: 'true'
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: az deployment sub what-if
+        run: |
+          az deployment sub what-if \
+            --location eastus2 \
+            --name "ci-${{ github.run_number }}-$(basename ${{ matrix.bicepparam }} .bicepparam)" \
+            --template-file infra/bicep/main.bicep \
+            --parameters "${{ matrix.bicepparam }}" \
+            --no-pretty-print | tail -80
+
+  #--------------------------------------------------------------------------
+  # 3. Security: trivy config + checkov
+  #--------------------------------------------------------------------------
+  security:
+    name: Security (trivy + checkov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: trivy config scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'config'
+          scan-ref: 'infra'
+          severity: 'HIGH,CRITICAL'
+          trivy-config: '.trivy.yaml'
+          exit-code: '1'
+          ignore-unfixed: 'true'
+
+      - name: checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra
+          config_file: .checkov.yaml
+          framework: terraform,bicep
+          quiet: true
+          soft_fail: false
+
+  #--------------------------------------------------------------------------
+  # 4. Cross-stack parity diff (Pester) — runs once
+  #--------------------------------------------------------------------------
+  parity:
+    name: Parity diff (TF ↔ Bicep)
+    runs-on: ubuntu-latest
+    needs: [terraform, bicep]
+    if: needs.terraform.result == 'success' && needs.bicep.result == 'success'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PowerShell + Pester
+        run: |
+          sudo apt-get update && sudo apt-get install -y powershell
+          pwsh -c "Install-Module -Name Pester -Force -Scope CurrentUser"
+      - name: Run parity-diff.ps1
+        run: pwsh -File scripts/parity-diff.ps1 -Blueprint smoke
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+  #--------------------------------------------------------------------------
+  # 5. PowerShell script parse-check (catches syntax breaks before runtime)
+  #--------------------------------------------------------------------------
+  ps-parse:
+    name: PowerShell parse check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PowerShell
+        run: sudo apt-get update && sudo apt-get install -y powershell
+      - name: Parse all .ps1 under scripts/
+        shell: pwsh
+        run: |
+          $bad = 0
+          Get-ChildItem -Path scripts -Filter *.ps1 -Recurse | ForEach-Object {
+            $errors = $null
+            $tokens = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              Write-Host "::error file=$($_.FullName)::$($errors.Count) parse errors"
+              $errors | ForEach-Object {
+                Write-Host "::error file=$($_.Extent.File),line=$($_.Extent.StartLineNumber)::$($_.Message)"
+              }
+              $script:bad++
+            } else {
+              Write-Host "::notice::$($_.Name) parses clean"
+            }
+          }
+          if ($bad -gt 0) { exit 1 }

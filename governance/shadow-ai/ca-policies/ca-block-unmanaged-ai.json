@@ -1,0 +1,32 @@
+{
+  "_comment": "Entra ID Conditional Access policy template. Ships in report-only state. Operator imports via 'New-MgIdentityConditionalAccessPolicy -BodyParameter (Get-Content -Raw ca-block-unmanaged-ai.json | ConvertFrom-Json)' and only flips state to 'enabled' after CISO sign-off.",
+  "displayName": "KLZ — Block unmanaged AI app sign-ins (REPORT-ONLY)",
+  "state": "enabledForReportingButNotEnforced",
+  "conditions": {
+    "applications": {
+      "includeApplications": [
+        "_REPLACE_WITH_OPENAI_APP_ID_",
+        "_REPLACE_WITH_ANTHROPIC_APP_ID_",
+        "_REPLACE_WITH_GEMINI_APP_ID_"
+      ],
+      "excludeApplications": [
+        "_REPLACE_WITH_SANCTIONED_M365_COPILOT_APP_ID_",
+        "_REPLACE_WITH_SANCTIONED_FOUNDRY_PROJECT_APP_ID_"
+      ]
+    },
+    "users": {
+      "includeUsers": [ "All" ],
+      "excludeGroups": [
+        "_REPLACE_WITH_AI_RESEARCH_GROUP_OBJECT_ID_"
+      ]
+    },
+    "clientAppTypes": [ "all" ],
+    "deviceStates": {
+      "includeStates": [ "All" ]
+    }
+  },
+  "grantControls": {
+    "operator": "OR",
+    "builtInControls": [ "block" ]
+  }
+}

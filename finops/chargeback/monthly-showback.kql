@@ -1,0 +1,101 @@
+// =====================================================================
+//  monthly-showback.kql — Monthly Foundry cost roll-up by APIM subscription.
+//
+//  Pattern source: Azure-Samples/AI-Gateway labs/finops-framework
+//    (modules/dashboard.bicep cost-attribution tile)
+//
+//  Chargeback model — primary
+//    One APIM product subscription = one consumer (team / project / use case).
+//    `ApimSubscriptionId` is the chargeback key; `SUBSCRIPTION_QUOTA_CL` is
+//    the lookup table that maps each ApimSubscriptionId to `ProjectName` and
+//    `CostCenter`. Keep that table seeded by the platform team
+//    (scripts/seed-pricing-table.ps1 emits both PRICING_CL and the quota rows).
+//
+//  Chargeback model — fallback
+//    If a request has no SUBSCRIPTION_QUOTA_CL row, fall back to the
+//    `x-project` / `x-cost-center` headers captured in
+//    `ApiManagementGatewayLogs.RequestHeaders` by the
+//    `Microsoft.ApiManagement/service/diagnostics` resource named
+//    `azuremonitor` (defined in infra/bicep/modules/ai-gateway/apim-ai-api.bicep).
+//    Final fallback: "unattributed". The header path is documentation-only
+//    in well-governed environments; relying on it operationally is a smell
+//    (callers can omit headers).
+//
+//  Join chain
+//    ApiManagementGatewayLlmLog    — authoritative PromptTokens /
+//                                    CompletionTokens / DeploymentName /
+//                                    CorrelationId
+//      ⨯ ApiManagementGatewayLogs  — ApimSubscriptionId + Region + parsed
+//                                    headers, joined on CorrelationId
+//      ⨯ PRICING_CL                — latest per-1K input/output price per
+//                                    Model+Region (arg_max on TimeGenerated)
+//      ⨯ SUBSCRIPTION_QUOTA_CL     — ProjectName + CostCenter +
+//                                    MonthlyQuotaUsd per ApimSubscriptionId
+//
+//  Price units
+//    PRICING_CL stores per-1K-token prices, so cost = tokens / 1000 * price.
+// =====================================================================
+
+let monthStart = startofmonth(now());
+let monthEnd   = endofmonth(now());
+
+// --- latest pricing snapshot per Model+Region -----------------------------
+let prices =
+    PRICING_CL
+    | summarize arg_max(TimeGenerated, *) by Model, Region;
+
+// --- latest quota + project + cost-center per APIM subscription ----------
+let quotas =
+    SUBSCRIPTION_QUOTA_CL
+    | summarize arg_max(TimeGenerated, *) by SubscriptionId;
+
+// --- gateway logs reduced to keys we need from CorrelationId join --------
+// RequestHeaders is a `;`-separated string of `name=value` pairs once the
+// `azuremonitor` APIM diagnostic captures them. extract() returns "" when
+// the header isn't present, which we coalesce away below.
+let gw =
+    ApiManagementGatewayLogs
+    | where TimeGenerated between (monthStart .. monthEnd)
+    | extend
+        HdrProject    = extract(@"x-project=([^;]+)",     1, tostring(RequestHeaders)),
+        HdrUseCase    = extract(@"x-use-case=([^;]+)",    1, tostring(RequestHeaders)),
+        HdrCostCenter = extract(@"x-cost-center=([^;]+)", 1, tostring(RequestHeaders))
+    | project CorrelationId, ApimSubscriptionId, Region, HdrProject, HdrUseCase, HdrCostCenter;
+
+ApiManagementGatewayLlmLog
+| where TimeGenerated between (monthStart .. monthEnd)
+| where isnotempty(DeploymentName)
+| join kind=leftouter gw on CorrelationId
+| join kind=leftouter prices on $left.DeploymentName == $right.Model, $left.Region == $right.Region
+| extend
+    ApimSub    = coalesce(ApimSubscriptionId, "anonymous"),
+    InputCost  = (PromptTokens     / 1000.0) * coalesce(InputPricePer1KTokens,  real(0)),
+    OutputCost = (CompletionTokens / 1000.0) * coalesce(OutputPricePer1KTokens, real(0))
+| extend TotalCost = InputCost + OutputCost
+| summarize
+    Calls           = count(),
+    PromptTokens    = sum(PromptTokens),
+    CompletionTok   = sum(CompletionTokens),
+    InputCostUsd    = round(sum(InputCost),  4),
+    OutputCostUsd   = round(sum(OutputCost), 4),
+    MTDCostUsd      = round(sum(TotalCost),  2),
+    HdrProject      = any(HdrProject),
+    HdrUseCase      = any(HdrUseCase),
+    HdrCostCenter   = any(HdrCostCenter)
+  by ApimSub, DeploymentName
+| join kind=leftouter quotas on $left.ApimSub == $right.SubscriptionId
+| extend
+    // Prefer the structured lookup; fall back to header; last resort "unattributed".
+    Project    = coalesce(ProjectName, iff(HdrProject    != "", HdrProject,    ""), "unattributed"),
+    UseCase    = coalesce(            iff(HdrUseCase    != "", HdrUseCase,    ""), "unattributed"),
+    CostCenter = coalesce(CostCenter, iff(HdrCostCenter != "", HdrCostCenter, ""), "unattributed"),
+    PctOfQuota =
+      iff(isnotnull(MonthlyQuotaUsd) and MonthlyQuotaUsd > real(0),
+          round((MTDCostUsd / MonthlyQuotaUsd) * 100.0, 1),
+          real(null))
+| project
+    ApimSub, Project, UseCase, CostCenter, DeploymentName,
+    Calls, PromptTokens, CompletionTok,
+    InputCostUsd, OutputCostUsd, MTDCostUsd,
+    MonthlyQuotaUsd, PctOfQuota
+| order by MTDCostUsd desc

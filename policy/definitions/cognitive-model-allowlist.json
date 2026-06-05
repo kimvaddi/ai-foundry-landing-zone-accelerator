@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-09-01/policyDefinition.json#",
+  "properties": {
+    "displayName": "KLZ — Cognitive Services model deployments must be on the approved allowlist",
+    "description": "Audits Cognitive Services / Azure OpenAI account deployments whose model.name is not in the approved allowlist. Use this to enforce a curated set of models per environment so cost + safety reviews happen before a new model lands in tenant. The deployed resource type is Microsoft.CognitiveServices/accounts/deployments and the relevant field is properties.model.name.",
+    "metadata": {
+      "category": "AI Services",
+      "version": "1.0.1",
+      "source": "klz-accelerator-finops",
+      "changelog": "1.0.1 — mode changed from Indexed to All. Cognitive Services /deployments sub-resources lack their own location and were silently skipped under Indexed mode, so Deny never fired."
+    },
+    "mode": "All",
+    "parameters": {
+      "allowedModels": {
+        "type": "Array",
+        "defaultValue": [
+          "gpt-4o",
+          "gpt-4o-mini",
+          "o3-mini",
+          "text-embedding-3-large",
+          "text-embedding-3-small"
+        ],
+        "metadata": {
+          "displayName": "Allowed model names",
+          "description": "List of allowed values for properties.model.name on Cognitive Services / Azure OpenAI deployments."
+        }
+      },
+      "effect": {
+        "type": "String",
+        "defaultValue": "Audit",
+        "allowedValues": [ "Audit", "Deny", "Disabled" ],
+        "metadata": {
+          "displayName": "Effect",
+          "description": "Audit to flag, Deny to block. Promote to Deny after Audit shows a clean baseline."
+        }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.CognitiveServices/accounts/deployments"
+          },
+          {
+            "not": {
+              "field": "Microsoft.CognitiveServices/accounts/deployments/model.name",
+              "in": "[parameters('allowedModels')]"
+            }
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

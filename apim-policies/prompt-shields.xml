@@ -1,0 +1,57 @@
+<!--
+  prompt-shields.xml — Azure AI Content Safety Prompt Shields (jailbreak detection)
+
+  Calls /text:shieldPrompt with userPrompt + documents (RAG context),
+  blocks if `attackDetected=true` for either userPrompt or documents.
+
+  Layer THIS BEFORE content-safety.xml in your inbound chain.
+-->
+<policies>
+  <inbound>
+    <base />
+
+    <set-variable name="userPrompt" value="@{
+      var body = context.Request.Body.As<JObject>(preserveContent: true);
+      var msgs = body["messages"] as JArray;
+      if (msgs == null) return string.Empty;
+      var last = msgs.Last(m => (string)m["role"] == "user");
+      return last == null ? string.Empty : (string)last["content"];
+    }" />
+
+    <send-request mode="new" response-variable-name="psResponse" timeout="10" ignore-error="false">
+      <set-url>@($"{{content-safety-endpoint}}/contentsafety/text:shieldPrompt?api-version=2024-09-01")</set-url>
+      <set-method>POST</set-method>
+      <set-header name="Ocp-Apim-Subscription-Key" exists-action="override">
+        <value>{{content-safety-key}}</value>
+      </set-header>
+      <set-header name="Content-Type" exists-action="override">
+        <value>application/json</value>
+      </set-header>
+      <set-body>@{
+        return new JObject(
+          new JProperty("userPrompt", (string)context.Variables["userPrompt"]),
+          new JProperty("documents", new JArray())
+        ).ToString();
+      }</set-body>
+    </send-request>
+
+    <choose>
+      <when condition="@{
+        var r = ((IResponse)context.Variables["psResponse"]).Body.As<JObject>(preserveContent: true);
+        var userAnalysis = r["userPromptAnalysis"] as JObject;
+        return userAnalysis != null && (bool)userAnalysis["attackDetected"];
+      }">
+        <return-response>
+          <set-status code="400" reason="PromptInjectionDetected" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>{ "error": { "code": "prompt_injection_blocked", "message": "Prompt blocked by Prompt Shields" } }</set-body>
+        </return-response>
+      </when>
+    </choose>
+  </inbound>
+  <backend><base /></backend>
+  <outbound><base /></outbound>
+  <on-error><base /></on-error>
+</policies>

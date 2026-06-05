@@ -1,0 +1,95 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workload": {
+      "value": "klzfin"
+    },
+    "env": {
+      "value": "poc"
+    },
+    "location": {
+      "value": "eastus2"
+    },
+    "searchLocation": {
+      "value": "westus2"
+    },
+    "networkMode": {
+      "value": "standalone"
+    },
+    "vnetAddressSpace": {
+      "value": "10.50.0.0/20"
+    },
+    "components": {
+      "value": {
+        "bastion": {
+          "deploy": false,
+          "sku": "Standard"
+        },
+        "jumpvm": {
+          "deploy": false,
+          "sku": "Standard_B2s"
+        },
+        "buildvm": {
+          "deploy": false,
+          "sku": "Standard_B2s"
+        },
+        "appGateway": {
+          "deploy": false,
+          "wafEnabled": true,
+          "sku": "WAF_v2"
+        },
+        "containerAppsEnv": {
+          "deploy": false
+        },
+        "apim": {
+          "deploy": false,
+          "sku": "StandardV2",
+          "networkMode": "none"
+        },
+        "standaloneSearch": {
+          "deploy": true,
+          "sku": "basic"
+        },
+        "notifications": {
+          "deploy": false
+        },
+        "otelCollector": {
+          "deploy": false
+        }
+      }
+    },
+    "tags": {
+      "value": {
+        "workload": "klzfin",
+        "env": "poc",
+        "blueprint": "poc-standalone-spoke"
+      }
+    },
+    "modelDeployments": {
+      "value": [
+        {
+          "name": "gpt-4o-mini",
+          "model": {
+            "format": "OpenAI",
+            "name": "gpt-4o-mini",
+            "version": "2024-07-18"
+          },
+          "sku": {
+            "name": "GlobalStandard",
+            "capacity": 10
+          }
+        }
+      ]
+    },
+    "foundryProjects": {
+      "value": [
+        {
+          "name": "default",
+          "displayName": "PoC project",
+          "description": "PoC standalone-spoke Foundry project."
+        }
+      ]
+    }
+  }
+}

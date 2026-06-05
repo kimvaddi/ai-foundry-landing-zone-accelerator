@@ -1,0 +1,64 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## Foundry — FinOps Showback\n\nMTD cost per subscription / project, derived from APIM AI Gateway token telemetry (`customMetrics`, namespace `AiGateway`) joined against an inline price book and per-project monthly budgets.\n\n**Data sources**\n- `customMetrics` (App Insights classic table) — emitted by the orchestrator after every chat completion. Dimensions: `MetricNamespace`, `ProjectName`, `CostCenter`, `SubscriptionId`, `ModelName`.\n- Inline price book (USD per 1K tokens) — refresh via `scripts/seed-pricing-table.ps1` when ready to swap to `PRICING_CL`.\n- Inline quotas (monthly USD cap per project) — refresh via custom-log seeding when ready to swap to `SUBSCRIPTION_QUOTA_CL`."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let prices = datatable(Model:string, InputPricePer1KTokens:real, OutputPricePer1KTokens:real)\n[\n  'gpt-4o',                  0.005,   0.015,\n  'gpt-4o-mini',             0.00015, 0.0006,\n  'gpt-4o-mini-2024-07-18',  0.00015, 0.0006,\n  'text-embedding-3-large',  0.00013, 0,\n  'o3-mini',                 0.0011,  0.0044\n];\nlet quotas = datatable(SubscriptionId:string, ProjectName:string, CostCenter:string, MonthlyQuotaUsd:real)\n[\n  'sub-control-001', 'foundry-controlplane', 'CC-1001',  50,\n  'sub-finops-002',  'finops-platform',      'CC-2002', 100,\n  'sub-demo-003',    'demo-project-c',       'CC-3003',  25\n];\ncustomMetrics\n| where timestamp >= startofmonth(now())\n| where tostring(customDimensions['MetricNamespace']) == 'AiGateway'\n| where name in ('PromptTokens', 'CompletionTokens')\n| extend ProjectName = tostring(customDimensions['ProjectName']),\n         SubId       = tostring(customDimensions['SubscriptionId']),\n         CostCenter  = tostring(customDimensions['CostCenter']),\n         ModelName   = tostring(customDimensions['ModelName'])\n| summarize Tokens = sum(valueSum) by ProjectName, SubId, CostCenter, ModelName, MetricName=name\n| evaluate pivot(MetricName, sum(Tokens))\n| extend PromptTokens = coalesce(toreal(PromptTokens), 0.0),\n         CompletionTokens = coalesce(toreal(CompletionTokens), 0.0)\n| join kind=leftouter prices on $left.ModelName == $right.Model\n| extend Cost = round((PromptTokens/1000.0)*coalesce(InputPricePer1KTokens,0.0) + (CompletionTokens/1000.0)*coalesce(OutputPricePer1KTokens,0.0), 4)\n| summarize MTDCost = round(sum(Cost), 4), Calls = count() by SubId, ProjectName, CostCenter\n| join kind=leftouter quotas on $left.SubId == $right.SubscriptionId, $left.ProjectName == $right.ProjectName\n| extend PctOfQuota = iif(coalesce(MonthlyQuotaUsd, 0.0) > 0, round(MTDCost/MonthlyQuotaUsd*100, 1), 0.0)\n| project Subscription=SubId, Project=ProjectName, CostCenter, Calls, MTDCost, MonthlyQuotaUsd=coalesce(MonthlyQuotaUsd, 0.0), PctOfQuota\n| order by PctOfQuota desc",
+        "size": 0,
+        "title": "MTD cost vs quota — by subscription & project",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "PctOfQuota", "formatter": 8, "formatOptions": { "palette": "yellowOrangeRed" } }
+          ]
+        }
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let prices = datatable(Model:string, InputPricePer1KTokens:real, OutputPricePer1KTokens:real)\n[\n  'gpt-4o',                  0.005,   0.015,\n  'gpt-4o-mini',             0.00015, 0.0006,\n  'gpt-4o-mini-2024-07-18',  0.00015, 0.0006,\n  'text-embedding-3-large',  0.00013, 0,\n  'o3-mini',                 0.0011,  0.0044\n];\ncustomMetrics\n| where timestamp > ago(30d)\n| where tostring(customDimensions['MetricNamespace']) == 'AiGateway'\n| where name in ('PromptTokens', 'CompletionTokens')\n| extend ModelName = tostring(customDimensions['ModelName']), MetricName=name\n| summarize Tokens = sum(valueSum) by bin(timestamp, 1d), ModelName, MetricName\n| evaluate pivot(MetricName, sum(Tokens))\n| extend PromptTokens = coalesce(toreal(PromptTokens), 0.0),\n         CompletionTokens = coalesce(toreal(CompletionTokens), 0.0)\n| join kind=leftouter prices on $left.ModelName == $right.Model\n| extend Cost = round((PromptTokens/1000.0)*coalesce(InputPricePer1KTokens,0.0) + (CompletionTokens/1000.0)*coalesce(OutputPricePer1KTokens,0.0), 4)\n| project timestamp, ModelName, Cost\n| render columnchart kind=stacked",
+        "size": 0,
+        "title": "Daily spend by model (30d)"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customMetrics\n| where timestamp > ago(24h)\n| where tostring(customDimensions['MetricNamespace']) == 'AiGateway'\n| where name == 'TotalTokens'\n| extend Project = tostring(customDimensions['ProjectName']), ModelName = tostring(customDimensions['ModelName'])\n| summarize Tokens=sum(valueSum), Calls=sum(valueCount) by Project, ModelName\n| order by Tokens desc",
+        "size": 0,
+        "title": "Token usage (last 24h) by project + model"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(Model:string, Region:string, Currency:string, InputPricePer1KTokens:real, OutputPricePer1KTokens:real)\n[\n  'gpt-4o',                  'eastus2', 'USD', 0.005,   0.015,\n  'gpt-4o-mini',             'eastus2', 'USD', 0.00015, 0.0006,\n  'gpt-4o-mini-2024-07-18',  'eastus2', 'USD', 0.00015, 0.0006,\n  'text-embedding-3-large',  'eastus2', 'USD', 0.00013, 0,\n  'o3-mini',                 'eastus2', 'USD', 0.0011,  0.0044\n]\n| order by Model asc",
+        "size": 0,
+        "title": "Current inline price book"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "datatable(SubscriptionId:string, ProjectName:string, CostCenter:string, MonthlyQuotaUsd:real, AlertThresholdPct:int)\n[\n  'sub-control-001', 'foundry-controlplane', 'CC-1001',  50, 80,\n  'sub-finops-002',  'finops-platform',      'CC-2002', 100, 80,\n  'sub-demo-003',    'demo-project-c',       'CC-3003',  25, 80\n]",
+        "size": 0,
+        "title": "Configured monthly quotas (inline)"
+      }
+    }
+  ],
+  "isLocked": false,
+  "fallbackResourceIds": []
+}

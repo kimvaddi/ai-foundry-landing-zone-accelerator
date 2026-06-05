@@ -1,0 +1,32 @@
+<!--
+  product-token-limit.xml — Product-scope policy
+
+  Enforces a TPM ceiling per APIM subscription per product, with HTTP 429
+  on excess. Use one product per project / per cost-center for clean attribution.
+
+  IMPORTANT: APIM evaluates @(...) as C#. Single quotes are CHAR literals.
+  Multi-char strings inside @(...) MUST be double-quoted. We wrap XML
+  attributes in single quotes so the C# can use double quotes natively.
+
+  NOTE: `remaining-tokens-variable-name`, `remaining-tokens-header-name`,
+  and `tokens-consumed-header-name` are NOT valid at product scope per
+  APIM policy schema — they only work at API/operation scope. Soft-warning
+  via x-remaining-tokens lives in the API-level policy instead.
+
+  Tune `tokens-per-minute` per product when assigning. Default 50_000 TPM via
+  __TOKENS_PER_MINUTE__ placeholder, swapped at deploy time by Bicep/TF.
+-->
+<policies>
+  <inbound>
+    <base />
+
+    <!-- Hard cap to prevent runaway agents -->
+    <azure-openai-token-limit
+      counter-key="@(context.Subscription?.Id ?? context.Request.IpAddress)"
+      tokens-per-minute="__TOKENS_PER_MINUTE__"
+      estimate-prompt-tokens="false" />
+  </inbound>
+  <backend><base /></backend>
+  <outbound><base /></outbound>
+  <on-error><base /></on-error>
+</policies>

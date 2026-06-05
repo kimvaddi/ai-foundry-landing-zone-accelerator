@@ -1,0 +1,354 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "9812783806944921728"
+    }
+  },
+  "parameters": {
+    "workload": {
+      "type": "string",
+      "defaultValue": "klzfin",
+      "metadata": {
+        "description": "Workload identifier used in resource names."
+      }
+    },
+    "env": {
+      "type": "string",
+      "defaultValue": "prod",
+      "metadata": {
+        "description": "Environment tag (dev/test/prod). Affects RG name only."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": {
+        "description": "Azure region for the hub."
+      }
+    },
+    "hubAddressSpace": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/16",
+      "metadata": {
+        "description": "Hub VNet CIDR. Must NOT overlap with the spoke VNet (default spoke is 10.50.0.0/20)."
+      }
+    },
+    "firewallSubnetCidr": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/26",
+      "metadata": {
+        "description": "AzureFirewallSubnet CIDR. Must be /26 or larger and live inside hubAddressSpace."
+      }
+    },
+    "firewallManagementSubnetCidr": {
+      "type": "string",
+      "defaultValue": "10.0.1.0/26",
+      "metadata": {
+        "description": "AzureFirewallManagementSubnet CIDR. REQUIRED for Firewall Basic SKU. Must be /26 or larger and live inside hubAddressSpace."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "workload": "[parameters('workload')]",
+        "env": "[parameters('env')]",
+        "purpose": "hub-bootstrap",
+        "ownedBy": "klz-accelerator"
+      },
+      "metadata": {
+        "description": "Common tags applied to every resource."
+      }
+    }
+  },
+  "variables": {
+    "rgName": "[format('rg-{0}-hub-{1}', parameters('workload'), parameters('env'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('rgName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('hub-bootstrap-{0}', parameters('env'))]",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "workload": {
+            "value": "[parameters('workload')]"
+          },
+          "env": {
+            "value": "[parameters('env')]"
+          },
+          "hubAddressSpace": {
+            "value": "[parameters('hubAddressSpace')]"
+          },
+          "firewallSubnetCidr": {
+            "value": "[parameters('firewallSubnetCidr')]"
+          },
+          "firewallManagementSubnetCidr": {
+            "value": "[parameters('firewallManagementSubnetCidr')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.43.8.12551",
+              "templateHash": "8913207127437767064"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "workload": {
+              "type": "string"
+            },
+            "env": {
+              "type": "string"
+            },
+            "hubAddressSpace": {
+              "type": "string"
+            },
+            "firewallSubnetCidr": {
+              "type": "string"
+            },
+            "firewallManagementSubnetCidr": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            }
+          },
+          "variables": {
+            "nameSuffix": "[format('{0}-{1}', parameters('workload'), parameters('env'))]",
+            "privateDnsZoneNames": [
+              "privatelink.vaultcore.azure.net",
+              "privatelink.openai.azure.com",
+              "privatelink.cognitiveservices.azure.com",
+              "privatelink.search.windows.net",
+              "privatelink.blob.core.windows.net",
+              "privatelink.azure-api.net",
+              "privatelink.documents.azure.com"
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2024-05-01",
+              "name": "[format('vnet-hub-{0}', variables('nameSuffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "[parameters('hubAddressSpace')]"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "AzureFirewallSubnet",
+                    "properties": {
+                      "addressPrefix": "[parameters('firewallSubnetCidr')]"
+                    }
+                  },
+                  {
+                    "name": "AzureFirewallManagementSubnet",
+                    "properties": {
+                      "addressPrefix": "[parameters('firewallManagementSubnetCidr')]"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2024-05-01",
+              "name": "[format('pip-fw-{0}', variables('nameSuffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard",
+                "tier": "Regional"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static",
+                "publicIPAddressVersion": "IPv4"
+              }
+            },
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2024-05-01",
+              "name": "[format('pip-fw-mgmt-{0}', variables('nameSuffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard",
+                "tier": "Regional"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static",
+                "publicIPAddressVersion": "IPv4"
+              }
+            },
+            {
+              "type": "Microsoft.Network/firewallPolicies",
+              "apiVersion": "2024-05-01",
+              "name": "[format('fwpol-{0}', variables('nameSuffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "tier": "Basic"
+                },
+                "threatIntelMode": "Alert"
+              }
+            },
+            {
+              "type": "Microsoft.Network/azureFirewalls",
+              "apiVersion": "2024-05-01",
+              "name": "[format('fw-{0}', variables('nameSuffix'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "AZFW_VNet",
+                  "tier": "Basic"
+                },
+                "firewallPolicy": {
+                  "id": "[resourceId('Microsoft.Network/firewallPolicies', format('fwpol-{0}', variables('nameSuffix')))]"
+                },
+                "ipConfigurations": [
+                  {
+                    "name": "fw-ipcfg",
+                    "properties": {
+                      "subnet": {
+                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('vnet-hub-{0}', variables('nameSuffix')), 'AzureFirewallSubnet')]"
+                      },
+                      "publicIPAddress": {
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-fw-{0}', variables('nameSuffix')))]"
+                      }
+                    }
+                  }
+                ],
+                "managementIpConfiguration": {
+                  "name": "fw-mgmt-ipcfg",
+                  "properties": {
+                    "subnet": {
+                      "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('vnet-hub-{0}', variables('nameSuffix')), 'AzureFirewallManagementSubnet')]"
+                    },
+                    "publicIPAddress": {
+                      "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-fw-mgmt-{0}', variables('nameSuffix')))]"
+                    }
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-fw-mgmt-{0}', variables('nameSuffix')))]",
+                "[resourceId('Microsoft.Network/publicIPAddresses', format('pip-fw-{0}', variables('nameSuffix')))]",
+                "[resourceId('Microsoft.Network/firewallPolicies', format('fwpol-{0}', variables('nameSuffix')))]",
+                "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-hub-{0}', variables('nameSuffix')))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "pdnsZones",
+                "count": "[length(variables('privateDnsZoneNames'))]"
+              },
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2024-06-01",
+              "name": "[variables('privateDnsZoneNames')[copyIndex()]]",
+              "location": "global",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "copy": {
+                "name": "pdnsLinks",
+                "count": "[length(variables('privateDnsZoneNames'))]"
+              },
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2024-06-01",
+              "name": "[format('{0}/link-to-hub', variables('privateDnsZoneNames')[copyIndex()])]",
+              "location": "global",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "virtualNetwork": {
+                  "id": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-hub-{0}', variables('nameSuffix')))]"
+                },
+                "registrationEnabled": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-hub-{0}', variables('nameSuffix')))]",
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNames')[copyIndex()])]"
+              ]
+            }
+          ],
+          "outputs": {
+            "hubVnetResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks', format('vnet-hub-{0}', variables('nameSuffix')))]"
+            },
+            "hubFirewallPrivateIp": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/azureFirewalls', format('fw-{0}', variables('nameSuffix'))), '2024-05-01').ipConfigurations[0].properties.privateIPAddress]"
+            },
+            "privateDnsZones": {
+              "type": "object",
+              "value": {
+                "vaultcore": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNames')[0])]",
+                "openai": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNames')[1])]",
+                "cognitiveServices": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNames')[2])]",
+                "search": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNames')[3])]",
+                "blob": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNames')[4])]",
+                "apim": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNames')[5])]",
+                "cosmosSql": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNames')[6])]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[variables('rgName')]"
+    },
+    "hubVnetResourceId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('hub-bootstrap-{0}', parameters('env'))), '2025-04-01').outputs.hubVnetResourceId.value]"
+    },
+    "hubFirewallPrivateIp": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('hub-bootstrap-{0}', parameters('env'))), '2025-04-01').outputs.hubFirewallPrivateIp.value]"
+    },
+    "existingPrivateDnsZones": {
+      "type": "object",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('hub-bootstrap-{0}', parameters('env'))), '2025-04-01').outputs.privateDnsZones.value]"
+    }
+  }
+}

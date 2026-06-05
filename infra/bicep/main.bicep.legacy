@@ -1,0 +1,394 @@
+// =====================================================================
+// main.bicep — Foundry Enterprise Landing Zone + FinOps (subscription scope)
+//
+// Modes
+//   smoke : LAW + App Insights + KV + Foundry account + 1 project + AI Search Basic
+//           + custom FinOps tables + workbooks + alerts + policy (audit)
+//   full  : smoke + APIM (Standard v2) + VNet + Private Endpoints + Defender enable
+//
+// Deploy
+//   az deployment sub create --location eastus2 \
+//     --template-file infra/bicep/main.bicep \
+//     --parameters infra/bicep/parameters/dev.bicepparam
+// =====================================================================
+
+targetScope = 'subscription'
+
+// ----------------------- Parameters -----------------------------------
+
+@description('Workload short name, used in naming. Lower-case, 3-8 chars.')
+@minLength(3)
+@maxLength(8)
+param workload string = 'klzfin'
+
+@description('Environment label (dev|test|prod).')
+@allowed([ 'dev', 'test', 'prod' ])
+param env string = 'dev'
+
+@description('Primary location for all resources.')
+param location string = 'eastus2'
+
+@description('Override location for AI Search (capacity in eastus2 is constrained; westus2 / eastus often have headroom).')
+param searchLocation string = location
+
+@description('Deployment mode — smoke skips APIM, VNet, PE, AppGW; full enables everything.')
+@allowed([ 'smoke', 'full' ])
+param mode string = 'smoke'
+
+@description('Tags applied to every resource.')
+param tags object = {
+  workload: workload
+  env: env
+  owner: 'platform-team'
+  costCenter: 'AI-Platform'
+  managedBy: 'klz-accelerator-finops'
+}
+
+@description('Models to deploy on the Foundry account.')
+param modelDeployments array = [
+  {
+    name: 'gpt-4o-mini'
+    model: { format: 'OpenAI', name: 'gpt-4o-mini', version: '2024-07-18' }
+    sku: { name: 'GlobalStandard', capacity: 10 }
+  }
+]
+
+@description('Foundry projects to create as child resources.')
+param foundryProjects array = [
+  {
+    name: 'default'
+    displayName: 'Default project'
+    description: 'Created by klz-accelerator-finops'
+  }
+]
+
+@description('VNet address space for full mode (default 10.50.0.0/16).')
+param vnetAddressSpace string = '10.50.0.0/16'
+
+@description('Deploy the Phase B.4 Logic App notification stub. Ships in state=Disabled regardless; this flag only controls whether the resource exists. Default false (no cost).')
+param deployNotifications bool = false
+
+@description('When deployNotifications=true, flip the Logic App workflow state to Enabled so Action Group webhooks actually fire. Default false (resource exists but does not run).')
+param enableNotificationsLogicApp bool = false
+
+@description('Incoming Webhook URL for a Teams channel. Used by the notifications Logic App ONLY when deployNotifications=true. SecureString — never written to logs.')
+@secure()
+param teamsWebhookUrl string = ''
+
+@description('Optional comma-separated fallback email list for the notifications workflow. Empty by default.')
+param notificationEmails string = ''
+
+@description('Deploy the Phase B.2 OTel collector + Container Apps Environment. Default false (avoids CAE Consumption pricing floor). Requires mode==full because the collector ingests from APIM upstream telemetry only available in full mode.')
+param deployOtel bool = false
+
+@description('Optional secondary OTLP endpoint (gRPC) for the OTel collector to dual-export to. Empty = Azure Monitor only.')
+param otelSecondaryEndpoint string = ''
+
+@description('APIM publisher contact local-part (left of @).')
+param apimPublisherLocalPart string = 'platform'
+
+@description('APIM publisher contact domain (right of @). Not validated for ownership.')
+param apimPublisherDomain string = 'klzfin.com'
+
+@description('APIM publisher display name.')
+param apimPublisherName string = 'KLZ FinOps Platform'
+
+// Synthesized at compile time — keeps email-shaped literals out of source files
+// (some editor tooling obfuscates them as `[email protected]`).
+var apimPublisherEmail = '${apimPublisherLocalPart}@${apimPublisherDomain}'
+
+// ----------------------- Naming ---------------------------------------
+
+var nameSuffix = '${workload}-${env}-${take(uniqueString(subscription().id, workload, env), 4)}'
+
+var rgPlatformName = 'rg-${workload}-platform-${env}'
+var rgFoundryName  = 'rg-${workload}-foundry-${env}'
+
+// ----------------------- Resource Groups ------------------------------
+
+resource rgPlatform 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: rgPlatformName
+  location: location
+  tags: tags
+}
+
+resource rgFoundry 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: rgFoundryName
+  location: location
+  tags: tags
+}
+
+// ----------------------- Foundation -----------------------------------
+
+module law 'modules/foundation/log-analytics.bicep' = {
+  scope: rgPlatform
+  name: 'law-${env}'
+  params: {
+    name: 'log-${nameSuffix}'
+    location: location
+    tags: tags
+  }
+}
+
+module appInsights 'modules/foundation/app-insights.bicep' = {
+  scope: rgPlatform
+  name: 'appi-${env}'
+  params: {
+    name: 'appi-${nameSuffix}'
+    location: location
+    workspaceResourceId: law.outputs.workspaceResourceId
+    tags: tags
+  }
+}
+
+module keyVault 'modules/foundation/key-vault.bicep' = {
+  scope: rgPlatform
+  name: 'kv-${env}'
+  params: {
+    name: 'kv-${nameSuffix}'
+    location: location
+    workspaceResourceId: law.outputs.workspaceResourceId
+    tags: tags
+  }
+}
+
+// ----------------------- AI platform ----------------------------------
+
+module foundry 'modules/ai-platform/foundry-account.bicep' = {
+  scope: rgFoundry
+  name: 'foundry-${env}'
+  params: {
+    name: 'aif-${nameSuffix}'
+    location: location
+    workspaceResourceId: law.outputs.workspaceResourceId
+    modelDeployments: modelDeployments
+    projects: foundryProjects
+    tags: tags
+  }
+}
+
+module aiSearch 'modules/ai-platform/ai-search.bicep' = {
+  scope: rgFoundry
+  name: 'search-${env}'
+  params: {
+    name: 'srch-${nameSuffix}'
+    location: searchLocation
+    workspaceResourceId: law.outputs.workspaceResourceId
+    tags: tags
+  }
+}
+
+// ----------------------- FinOps ---------------------------------------
+
+module finops 'modules/finops/custom-tables.bicep' = {
+  scope: rgPlatform
+  name: 'finops-${env}'
+  params: {
+    workspaceName: law.outputs.workspaceName
+    workspaceResourceId: law.outputs.workspaceResourceId
+    location: location
+    tags: tags
+  }
+}
+
+// ----------------------- Observability --------------------------------
+
+module workbooks 'modules/observability/workbooks.bicep' = {
+  scope: rgPlatform
+  name: 'wb-${env}'
+  params: {
+    location: location
+    workspaceResourceId: law.outputs.workspaceResourceId
+    appInsightsResourceId: appInsights.outputs.resourceId
+    tags: tags
+  }
+}
+
+module alerts 'modules/observability/alerts.bicep' = {
+  scope: rgPlatform
+  name: 'alerts-${env}'
+  params: {
+    location: location
+    nameSuffix: nameSuffix
+    workspaceResourceId: law.outputs.workspaceResourceId
+    tags: tags
+    // Cost-vs-quota alert queries ApiManagementGatewayLlmLog which only exists
+    // when APIM is deployed (full mode). Skip the cost rule in smoke to avoid
+    // KQL schema-validation failure against an empty workspace.
+    deployCostAlert: mode == 'full'
+  }
+}
+
+// ----------------------- Networking (full mode) -----------------------
+
+module vnet 'modules/networking/vnet.bicep' = if (mode == 'full') {
+  scope: rgPlatform
+  name: 'vnet-${env}'
+  params: {
+    name: 'vnet-${nameSuffix}'
+    location: location
+    addressPrefix: vnetAddressSpace
+    workspaceResourceId: law.outputs.workspaceResourceId
+    tags: tags
+  }
+}
+
+module privateDns 'modules/networking/private-dns.bicep' = if (mode == 'full') {
+  scope: rgPlatform
+  name: 'pdns-${env}'
+  params: {
+    vnetResourceId: mode == 'full' ? vnet.outputs.vnetId : ''
+    tags: tags
+  }
+}
+
+module peFoundry 'modules/networking/private-endpoint.bicep' = if (mode == 'full') {
+  scope: rgFoundry
+  name: 'pe-foundry-${env}'
+  params: {
+    name: 'pe-aif-${nameSuffix}'
+    location: location
+    targetResourceId: foundry.outputs.resourceId
+    groupId: 'account'
+    subnetResourceId: mode == 'full' ? vnet.outputs.peSubnetId : ''
+    privateDnsZoneResourceIds: mode == 'full' ? [
+      privateDns.outputs.zoneIds.cognitiveServices
+      privateDns.outputs.zoneIds.openAi
+    ] : []
+    tags: tags
+  }
+}
+
+module peKeyVault 'modules/networking/private-endpoint.bicep' = if (mode == 'full') {
+  scope: rgPlatform
+  name: 'pe-kv-${env}'
+  params: {
+    name: 'pe-kv-${nameSuffix}'
+    location: location
+    targetResourceId: keyVault.outputs.resourceId
+    groupId: 'vault'
+    subnetResourceId: mode == 'full' ? vnet.outputs.peSubnetId : ''
+    privateDnsZoneResourceIds: mode == 'full' ? [
+      privateDns.outputs.zoneIds.keyVault
+    ] : []
+    tags: tags
+  }
+}
+
+// ----------------------- AI Gateway / APIM (full mode) ----------------
+
+module apim 'modules/ai-gateway/apim.bicep' = if (mode == 'full') {
+  scope: rgPlatform
+  name: 'apim-${env}'
+  params: {
+    name: 'apim-${nameSuffix}'
+    location: location
+    publisherEmail: apimPublisherEmail
+    publisherName: apimPublisherName
+    appInsightsResourceId: appInsights.outputs.resourceId
+    appInsightsConnectionString: appInsights.outputs.connectionString
+    workspaceResourceId: law.outputs.workspaceResourceId
+    tags: tags
+  }
+}
+
+module apimAi 'modules/ai-gateway/apim-ai-api.bicep' = if (mode == 'full') {
+  scope: rgPlatform
+  name: 'apim-ai-${env}'
+  params: {
+    apimName: mode == 'full' ? apim.outputs.name : ''
+    foundryEndpoint: foundry.outputs.endpoint
+    foundryResourceId: foundry.outputs.resourceId
+    appInsightsLoggerId: mode == 'full' ? apim.outputs.appInsightsLoggerId : ''
+  }
+}
+
+module apimFoundryRbac 'modules/ai-gateway/apim-foundry-rbac.bicep' = if (mode == 'full') {
+  scope: rgFoundry
+  name: 'apim-foundry-rbac-${env}'
+  params: {
+    foundryAccountName: 'aif-${nameSuffix}'
+    principalId: mode == 'full' ? apim.outputs.principalId : ''
+  }
+}
+
+// ----------------------- Phase B.4 — Notifications (disabled by default) ---
+// Ships in state=Disabled. Operator flips notifications.bicep `enabled` to true
+// AND populates destinations before any alert fans out. Safety belt + suspenders:
+//  - `deployNotifications` here gates resource existence (default false = no cost)
+//  - notifications.bicep `enabled` gates Logic App state (default false = no fire)
+module notifications 'modules/observability/notifications.bicep' = if (deployNotifications) {
+  scope: rgPlatform
+  name: 'notif-${env}'
+  params: {
+    name: 'logic-notif-${nameSuffix}'
+    location: location
+    tags: tags
+    enabled: enableNotificationsLogicApp
+    teamsWebhookUrl: teamsWebhookUrl
+    notificationEmails: notificationEmails
+  }
+}
+
+// ----------------------- Phase B.2 — OTel collector (opt-in) ----------------
+// Disabled by default because Container Apps Environment carries a Consumption
+// pricing floor for running replicas. Enable with `-deployOtel true` once an
+// app team needs OTLP ingestion in addition to the App Insights logger that
+// Phase A.5b already wires into APIM.
+module containerAppsEnv 'modules/observability/container-apps-env.bicep' = if (deployOtel) {
+  scope: rgPlatform
+  name: 'cae-${env}'
+  params: {
+    name: 'cae-${nameSuffix}'
+    location: location
+    workspaceCustomerId: law.outputs.workspaceCustomerId
+    workspaceSharedKey: law.outputs.workspaceSharedKey
+    tags: tags
+  }
+}
+
+module otelCollector 'modules/observability/otel-collector.bicep' = if (deployOtel) {
+  scope: rgPlatform
+  name: 'otel-${env}'
+  params: {
+    name: 'ca-otel-${nameSuffix}'
+    location: location
+    environmentId: deployOtel ? containerAppsEnv.outputs.environmentId : ''
+    image: 'mcr.microsoft.com/azuremonitor/containerinsights/cidev/applicationinsights-opentelemetry-collector:latest'
+    appInsightsConnectionString: appInsights.outputs.connectionString
+    secondaryOtlpEndpoint: otelSecondaryEndpoint
+    minReplicas: 0
+    maxReplicas: 3
+    tags: tags
+  }
+}
+
+// ----------------------- Outputs --------------------------------------
+
+output workspaceId string = law.outputs.workspaceResourceId
+output workspaceCustomerId string = law.outputs.workspaceCustomerId
+output appInsightsId string = appInsights.outputs.resourceId
+output keyVaultId string = keyVault.outputs.resourceId
+output foundryAccountId string = foundry.outputs.resourceId
+output foundryEndpoint string = foundry.outputs.endpoint
+output searchServiceId string = aiSearch.outputs.resourceId
+output deploymentMode string = mode
+
+// FinOps / Phase B.3 outputs (consumed by rbac/assignments.bicep + the
+// agent-runtime klz_client.py runtime proof).
+output dceEndpoint string = finops.outputs.dceEndpoint
+output pricingDcrImmutableId string = finops.outputs.pricingDcrImmutableId
+output quotaDcrImmutableId string = finops.outputs.quotaDcrImmutableId
+output agentAuditDcrImmutableId string = finops.outputs.agentAuditDcrImmutableId
+output agentAuditDcrId string = finops.outputs.agentAuditDcrId
+output agentAuditStream string = finops.outputs.agentAuditStream
+
+// Full-mode outputs (empty strings in smoke)
+output vnetId string = mode == 'full' ? vnet.outputs.vnetId : ''
+output apimGatewayUrl string = mode == 'full' ? apim.outputs.gatewayUrl : ''
+output apimResourceId string = mode == 'full' ? apim.outputs.resourceId : ''
+
+// Opt-in outputs (empty strings when their flag is false)
+output notificationWorkflowId string = deployNotifications ? notifications.outputs.workflowId : ''
+output notificationWorkflowState string = deployNotifications ? notifications.outputs.workflowState : 'NotDeployed'
+output otelCollectorEnvId string = deployOtel ? containerAppsEnv.outputs.environmentId : ''

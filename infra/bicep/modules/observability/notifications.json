@@ -1,0 +1,277 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "7620702343120456593"
+    }
+  },
+  "parameters": {
+    "name": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource name of the Logic App."
+      }
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Region; usually inherited from the parent deployment."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Common tags."
+      }
+    },
+    "enabled": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Master switch. Leave false until destinations are configured AND change has been approved."
+      }
+    },
+    "teamsWebhookUrl": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional Teams Incoming Webhook URL. Stored as a workflow parameter, empty by default."
+      }
+    },
+    "serviceNowEndpoint": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional ServiceNow ingestion endpoint. Stored as a workflow parameter, empty by default."
+      }
+    },
+    "notificationEmails": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional comma-separated email list for fallback notifications. Empty by default."
+      }
+    },
+    "office365ConnectionId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Connection ID for the office365 connector if email is enabled. Empty by default."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('name')]",
+      "location": "[parameters('location')]",
+      "tags": "[union(parameters('tags'), createObject('klz:component', 'notifications', 'klz:state', if(parameters('enabled'), 'enabled', 'disabled')))]",
+      "properties": {
+        "state": "[if(parameters('enabled'), 'Enabled', 'Disabled')]",
+        "parameters": {
+          "$connections": {
+            "value": {}
+          },
+          "teamsWebhookUrl": {
+            "value": "[parameters('teamsWebhookUrl')]"
+          },
+          "serviceNowEndpoint": {
+            "value": "[parameters('serviceNowEndpoint')]"
+          },
+          "notificationEmails": {
+            "value": "[parameters('notificationEmails')]"
+          }
+        },
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "type": "Object",
+              "defaultValue": {}
+            },
+            "teamsWebhookUrl": {
+              "type": "SecureString",
+              "defaultValue": ""
+            },
+            "serviceNowEndpoint": {
+              "type": "SecureString",
+              "defaultValue": ""
+            },
+            "notificationEmails": {
+              "type": "String",
+              "defaultValue": ""
+            }
+          },
+          "triggers": {
+            "manual": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaId": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "essentials": {
+                          "type": "object",
+                          "properties": {
+                            "alertId": {
+                              "type": "string"
+                            },
+                            "alertRule": {
+                              "type": "string"
+                            },
+                            "severity": {
+                              "type": "string"
+                            },
+                            "signalType": {
+                              "type": "string"
+                            },
+                            "monitorCondition": {
+                              "type": "string"
+                            },
+                            "firedDateTime": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "alertContext": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "actions": {
+            "Check_Teams_Webhook": {
+              "type": "If",
+              "runAfter": {},
+              "expression": {
+                "and": [
+                  {
+                    "not": {
+                      "equals": [
+                        "@parameters('teamsWebhookUrl')",
+                        ""
+                      ]
+                    }
+                  }
+                ]
+              },
+              "actions": {
+                "Post_to_Teams": {
+                  "type": "Http",
+                  "runAfter": {},
+                  "inputs": {
+                    "method": "POST",
+                    "uri": "@parameters('teamsWebhookUrl')",
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "body": {
+                      "type": "message",
+                      "attachments": [
+                        {
+                          "contentType": "application/vnd.microsoft.card.adaptive",
+                          "content": {
+                            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                            "type": "AdaptiveCard",
+                            "version": "1.5",
+                            "body": [
+                              {
+                                "type": "TextBlock",
+                                "size": "Large",
+                                "weight": "Bolder",
+                                "color": "Attention",
+                                "text": "@{concat('KLZ Alert: ', coalesce(triggerBody()?['data']?['essentials']?['alertRule'], 'unknown rule'))}",
+                                "wrap": true
+                              },
+                              {
+                                "type": "FactSet",
+                                "facts": [
+                                  {
+                                    "title": "Severity",
+                                    "value": "@{coalesce(triggerBody()?['data']?['essentials']?['severity'], 'n/a')}"
+                                  },
+                                  {
+                                    "title": "Condition",
+                                    "value": "@{coalesce(triggerBody()?['data']?['essentials']?['monitorCondition'], 'n/a')}"
+                                  },
+                                  {
+                                    "title": "Signal",
+                                    "value": "@{coalesce(triggerBody()?['data']?['essentials']?['signalType'], 'n/a')}"
+                                  },
+                                  {
+                                    "title": "Fired",
+                                    "value": "@{coalesce(triggerBody()?['data']?['essentials']?['firedDateTime'], 'n/a')}"
+                                  },
+                                  {
+                                    "title": "AlertId",
+                                    "value": "@{coalesce(triggerBody()?['data']?['essentials']?['alertId'], 'n/a')}"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              }
+            },
+            "Respond_200": {
+              "type": "Response",
+              "runAfter": {
+                "Check_Teams_Webhook": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              },
+              "inputs": {
+                "statusCode": 200,
+                "body": {
+                  "status": "accepted",
+                  "teamsPosted": "@{if(equals(actions('Check_Teams_Webhook')?['status'], 'Succeeded'), 'true', 'false')}"
+                }
+              }
+            }
+          },
+          "outputs": {}
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "workflowId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Logic/workflows', parameters('name'))]"
+    },
+    "workflowState": {
+      "type": "string",
+      "value": "[if(parameters('enabled'), 'Enabled', 'Disabled')]"
+    },
+    "triggerCallbackHint": {
+      "type": "string",
+      "value": "[format('After enabling, fetch the manual trigger URL via: az rest --method post --uri \"{0}/triggers/manual/listCallbackUrl?api-version=2019-05-01\"', resourceId('Microsoft.Logic/workflows', parameters('name')))]"
+    }
+  }
+}

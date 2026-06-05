@@ -1,0 +1,81 @@
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Backup files (any extension)
+*.bak
+*.bicep.bak
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+# Binary terraform plans (highly sensitive — contain all resource IDs + inline secrets)
+*.bin
+crash.log
+
+# Secrets / local
+*.env
+.env.*
+*.pem
+*.pfx
+local.settings.json
+secrets/
+.azure/
+# Customer-specific config (real tenant IDs, owner emails, group object IDs)
+**/customer.psd1
+**/customer.local.*
+**/*.local.psd1
+# Filled-in stakeholder placeholder doc (after token swap) — keep template only
+**/stakeholders.local.md
+
+# Personal / pilot test configs (real GUIDs — keep local only)
+rollout/config/pilot-test.psd1
+rollout/config/kim-test.psd1
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+
+# Outputs
+out/
+dist/
+bin/
+obj/
+# Captured evidence runs (compliance JSON, what-if logs, run transcripts)
+**/proof/
+
+# Repo-root deploy artifacts (transient outputs from local runs)
+/out-*.log
+/out-*.json
+/STATUS.txt
+/rai-policies-list.json
+/deploy-*.txt
+
+# Customer-event-specific docs (local working artifacts — not public-template material)
+docs/workshop-agenda-*.md
+docs/workshop-morning-checklist.md
+docs/exec-1-pager.md
+docs/workbook-finops-fix-*.md
+# Internal build / inheritance notes — author's working files, not public template material
+docs/upstream-analysis.md
+docs/agent-governance-toolkit-fork-analysis.md
+docs/AGT-Gap-Analysis.md
+CurrentStateScreenshot/
+
+# Customer-specific filled-in deploy parameters (contain real tenant/sub/RG IDs)
+# Templates without ".deploy." in the name are committed; ".deploy.*" are the filled local copies.
+**/*.deploy.bicepparam
+**/*.deploy.json
+# Transient bicep build outputs (ARM JSON next to the source .bicep)
+infra/bicep/main.json
+policy/mg/main.json

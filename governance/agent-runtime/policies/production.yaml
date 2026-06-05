@@ -1,0 +1,306 @@
+# =============================================================================
+# Production Policy Template — KLZ FinOps Accelerator (Wave 2 fork)
+# =============================================================================
+# Strict lockdown profile for the PROD ring. Allowlist-only mode, full audit
+# logging, human approval required for all sensitive operations.
+#
+# This is a STANDALONE template (it is NOT composed by klz-baseline.yaml).
+# Use klz-production.yaml as the composition entry point for prod agents.
+#
+# Forked from microsoft/agent-governance-toolkit @ 6f94b69
+#   agent-governance-python/agent-os/templates/policies/production.yaml
+# MIT-licensed. Customized for KLZ FinOps accelerator.
+#
+# KLZ deltas vs upstream:
+#   * tool_allowlist / network_allowlist: Azure-only egress
+#       (apim-klzfin-* + *.cognitiveservices.azure.com + *.openai.azure.com
+#        + *.blob.core.windows.net). NO public AI endpoints.
+#   * Tighter LLM rate limits (matches APIM throttling policy in prod).
+#   * Audit export: Azure Log Analytics (KlzAgentAudit_CL custom table) +
+#       Application Insights — NOT syslog/webhook. Webhook env-vars kept
+#       for cybersec SIEM-of-choice integration.
+#   * Notifications: env-var driven so consuming team can pick
+#       PagerDuty / Slack / Teams / Logic Apps without code change.
+#   * `resource_limits.max_tokens_per_call` raised from 4000 -> 8000 to
+#       match Foundry gpt-4o context window (still well under model max).
+# =============================================================================
+
+kernel:
+  version: "1.0"
+  mode: strict
+  template: production
+
+description: |
+  KLZ production lockdown policy. Strict allowlist-only mode. Requires human
+  approval for sensitive tools, enforces conservative rate limits, full audit
+  logging shipped to Log Analytics + Application Insights. Designed for the
+  PROD ring where security and stability are paramount.
+
+signals:
+  enabled:
+    - SIGSTOP   # Pause for human review
+    - SIGKILL   # Terminate on violation
+    - SIGCONT   # Resume after approval
+    - SIGUSR1   # Custom: escalate to SRE team
+    - SIGUSR2   # Custom: notify security team
+
+policies:
+  # ============================================
+  # STRICT ALLOWLIST-ONLY MODE  (KLZ: Azure-only egress)
+  # ============================================
+  - name: tool_allowlist
+    description: Only explicitly allowed tools may be used in production.
+    severity: critical
+    category: security
+    allow:
+      - action: read_file
+        paths: ["/app/**", "/config/**"]
+      - action: search
+        scope: [codebase, documentation]
+      - action: list_files
+        paths: ["/app/**"]
+      - action: database_read
+        tables: [public_data, config, feature_flags]
+      - action: http_request
+        methods: [GET, POST]
+        domains:
+          - "apim-klzfin-*.azure-api.net"
+          - "*.cognitiveservices.azure.com"
+          - "*.openai.azure.com"
+          - "*.blob.core.windows.net"
+    deny:
+      - action: "*"  # Default-deny: anything not in `allow` is blocked.
+    action: SIGKILL
+    message: "Production: action not in KLZ allowlist — blocked."
+
+  - name: block_write_operations
+    description: Block all write operations without explicit approval.
+    severity: critical
+    category: security
+    deny:
+      - action: file_write
+        paths: ["/**"]
+      - action: database_write
+        operations: [INSERT, UPDATE, DELETE, DROP, TRUNCATE, ALTER]
+      - action: shell_exec
+        commands: ["*"]
+      - action: http_request
+        methods: [PUT, DELETE, PATCH]
+    action: SIGKILL
+    requires_approval: true
+    approval_level: sre_team
+    message: "Production: write operation requires SRE approval."
+
+  # ============================================
+  # HUMAN APPROVAL FOR SENSITIVE TOOLS  (SoD tiers)
+  # ============================================
+  - name: sensitive_tool_approval
+    description: Require human approval for sensitive operations.
+    severity: critical
+    category: workflow
+    requires_approval:
+      - action: database_write
+        approval_level: dba_team
+        timeout_minutes: 30
+      - action: deploy
+        approval_level: release_manager
+        timeout_minutes: 60
+      - action: config_change
+        approval_level: sre_team
+        timeout_minutes: 15
+      - action: user_data_access
+        approval_level: privacy_officer
+        timeout_minutes: 30
+      - action: payment_operation
+        approval_level: finance_team
+        timeout_minutes: 15
+      - action: infrastructure_change
+        approval_level: platform_team
+        timeout_minutes: 30
+    action: SIGSTOP
+    message: "Production: human approval required for this operation."
+
+  # ============================================
+  # DANGEROUS PATTERN BLOCKING
+  # ============================================
+  - name: destructive_operations
+    description: Block all destructive operations.
+    severity: critical
+    category: security
+    deny:
+      - patterns:
+          # SQL destruction
+          - '(?i)(DROP|TRUNCATE)\s+TABLE'
+          - '(?i)DELETE\s+FROM\s+\w+\s*(?:;|$)'
+          - '(?i)ALTER\s+TABLE\s+\w+\s+DROP'
+          # File system destruction
+          - '(?i)(rm\s+-rf|del\s+/[sS]|format\s+[a-zA-Z]:)'
+          - '(?i)(rmdir|rd)\s+/[sS]'
+          # Service disruption
+          - '(?i)(systemctl|service)\s+(stop|restart|disable)'
+          - '(?i)(kill|pkill|killall)\s+'
+    action: SIGKILL
+    message: "Production: destructive operation blocked."
+
+  - name: credential_protection
+    description: Prevent credential exposure in production.
+    severity: critical
+    category: security
+    deny:
+      - patterns:
+          - '(?i)(password|api[_-]?key|secret|token)\s*[:=]\s*["''][^"'']+["'']'
+          - 'sk-[A-Za-z0-9]{32,}'
+          - 'ghp_[A-Za-z0-9]{36}'
+          - 'AKIA[A-Z0-9]{16}'
+          - '(?i)(private[_-]?key|signing[_-]?key)\s*[:=]'
+    action: SIGKILL
+    message: "Production: credential exposure blocked."
+
+  - name: pii_protection
+    description: Block PII in production outputs.
+    severity: critical
+    category: compliance
+    scope: [output]
+    deny:
+      - patterns:
+          - '\b\d{3}-\d{2}-\d{4}\b'
+          - '\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b'
+          - '(?i)(email|e-mail)\s*[:=]\s*[\w.+-]+@[\w-]+\.[\w.-]+'
+    action: SIGKILL
+    message: "Production: PII detected in output — blocked."
+
+  # ============================================
+  # RATE LIMITING  (KLZ: tighter LLM caps matching APIM prod policy)
+  # ============================================
+  - name: strict_rate_limits
+    description: Conservative rate limits for production stability.
+    severity: high
+    category: operational
+    limits:
+      - action: llm_call
+        max_per_minute: 20      # KLZ: lower than upstream 30 — matches prod APIM
+        max_per_hour: 300       # KLZ: lower than upstream 500
+      - action: tool_call
+        max_per_session: 50
+        max_per_minute: 20
+      - action: database_query
+        max_per_minute: 50
+        max_per_hour: 1000
+      - action: http_request
+        max_per_minute: 30
+        max_per_hour: 500
+      - action: file_read
+        max_per_minute: 100
+    action: SIGSTOP
+    message: "Production: rate limit exceeded — throttling."
+
+  - name: resource_limits
+    description: Prevent resource exhaustion.
+    severity: high
+    category: operational
+    limits:
+      - memory_mb: 512
+      - cpu_percent: 50
+      - disk_write_mb: 50
+      - max_tokens_per_call: 8000     # KLZ: raised from 4000 for gpt-4o context
+      - max_concurrent_sessions: 10
+    action: SIGSTOP
+    message: "Production: resource limit reached."
+
+  # ============================================
+  # NETWORK RESTRICTIONS  (KLZ: Azure-only)
+  # ============================================
+  - name: network_allowlist
+    description: Strict network access control — Azure-only egress.
+    severity: critical
+    category: security
+    allow:
+      - action: http_request
+        domains:
+          - "apim-klzfin-*.azure-api.net"
+          - "*.cognitiveservices.azure.com"
+          - "*.openai.azure.com"
+          - "*.blob.core.windows.net"
+    deny:
+      - action: http_request
+        domains: ["*"]
+    action: SIGKILL
+    message: "Production: network request to unapproved domain blocked."
+
+# ============================================
+# FULL AUDIT LOGGING  (KLZ: LAW + App Insights primary, webhook optional)
+# ============================================
+audit:
+  enabled: true
+  mandatory: true
+  log_path: "${KLZ_AUDIT_LOG_PATH:-./logs/production-audit.log}"
+  include:
+    - all_actions
+    - policy_checks
+    - signals
+    - approvals
+    - denials
+    - rate_limit_events
+    - authentication_events
+    - error_events
+  format: json
+  fields:
+    - timestamp
+    - agent_id
+    - action
+    - policy
+    - result
+    - user
+    - session_id
+    - correlation_id
+    - source_ip
+    - duration_ms
+    - token_count
+  retention_days: 365
+  tamper_detection:
+    enabled: true
+    algorithm: sha256
+  export:
+    enabled: true
+    destinations:
+      - type: log_analytics
+        workspace_id: "${LOG_ANALYTICS_WORKSPACE_ID}"
+        custom_table: "KlzAgentAudit_CL"
+      - type: application_insights
+        connection_string: "${APPLICATIONINSIGHTS_CONNECTION_STRING}"
+      - type: opentelemetry
+        endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+        protocol: grpc
+      # Optional webhook for cybersec SIEM-of-choice. Disabled unless env var set.
+      - type: webhook
+        url: "${SIEM_WEBHOOK_URL}"
+        enabled_when: "${SIEM_WEBHOOK_URL}"
+        headers:
+          Authorization: "Bearer ${AUDIT_WEBHOOK_TOKEN}"
+
+# ============================================
+# NOTIFICATIONS  (KLZ: env-var driven, channel-agnostic)
+# ============================================
+notifications:
+  channels:
+    - name: sre_team
+      type: pagerduty
+      routing_key: "${PAGERDUTY_KEY}"
+      enabled_when: "${PAGERDUTY_KEY}"
+      events: [SIGKILL, rate_limit_exceeded, resource_exhaustion]
+    - name: security_team
+      type: webhook
+      webhook: "${SECURITY_WEBHOOK_URL}"
+      enabled_when: "${SECURITY_WEBHOOK_URL}"
+      events: [credential_exposure, pii_detection, unauthorized_access]
+    - name: compliance_team
+      type: email
+      to: "${COMPLIANCE_EMAIL}"
+      enabled_when: "${COMPLIANCE_EMAIL}"
+      events: [pii_detection, audit_export_failure]
+
+settings:
+  human_approval_required: true
+  auto_continue_on_warn: false
+  debug_mode: false
+  fail_closed: true

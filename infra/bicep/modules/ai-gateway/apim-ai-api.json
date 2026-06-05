@@ -1,0 +1,383 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "15218213311765181329"
+    }
+  },
+  "parameters": {
+    "apimName": {
+      "type": "string",
+      "metadata": {
+        "description": "APIM service name (parent)."
+      }
+    },
+    "foundryEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Foundry account endpoint (https://aif-<suffix>.cognitiveservices.azure.com)."
+      }
+    },
+    "foundryResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Foundry resource id — used for the backend resource-id property (enables MI auth)."
+      }
+    },
+    "appInsightsLoggerId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource id of the APIM `applicationinsights` logger (output of apim.bicep). Required for the applicationinsights diagnostic that drives the azure-openai-emit-token-metric policy + per-request telemetry into App Insights."
+      }
+    },
+    "productTokensPerMinute": {
+      "type": "int",
+      "defaultValue": 50000,
+      "metadata": {
+        "description": "Per-product TPM cap. Templated into product-token-limit.xml."
+      }
+    },
+    "enableContentSafety": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable Azure AI Content Safety category scoring (Hate/Sexual/Violence/SelfHarm). Adds llm-content-safety policy element + content-safety-backend."
+      }
+    },
+    "enablePromptShields": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable Prompt Shields jailbreak / indirect-injection detection. Reuses the same llm-content-safety element and content-safety-backend as enableContentSafety. If either is true, the element is added; shield-prompt attribute reflects this flag."
+      }
+    },
+    "safetyThreshold": {
+      "type": "int",
+      "defaultValue": 4,
+      "allowedValues": [
+        0,
+        2,
+        4,
+        6
+      ],
+      "metadata": {
+        "description": "Content Safety severity threshold (FourSeverityLevels: 0/2/4/6). 4 = block medium+ severity (default)."
+      }
+    },
+    "contentSafetyEndpoint": {
+      "type": "string",
+      "defaultValue": "[parameters('foundryEndpoint')]",
+      "metadata": {
+        "description": "Content Safety endpoint. Defaults to Foundry account endpoint (kind=AIServices exposes /contentsafety/* on the same FQDN)."
+      }
+    },
+    "contentSafetyResourceId": {
+      "type": "string",
+      "defaultValue": "[parameters('foundryResourceId')]",
+      "metadata": {
+        "description": "Content Safety resource id — used for backend resourceId (enables MI auth). Defaults to Foundry resource id."
+      }
+    },
+    "enableSemanticCache": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable APIM semantic cache (vector-similarity prompt match). Requires Redis Enterprise with RediSearch + an embedding deployment."
+      }
+    },
+    "embeddingsDeploymentName": {
+      "type": "string",
+      "defaultValue": "text-embedding-3-large",
+      "metadata": {
+        "description": "Embedding deployment name used by the semantic cache lookup policy."
+      }
+    }
+  },
+  "variables": {
+    "$fxv#0": "<!--\r\n  inbound-emit-metrics.xml — Service-wide AI Gateway inbound policy (global scope)\r\n\r\n  Emits per-request token + cost metrics into Application Insights with the\r\n  dimensions you need for chargeback: SubscriptionId, Project, UseCase, CostCenter,\r\n  ApiName. Pair with `product-token-limit.xml` at product scope.\r\n\r\n  IMPORTANT notes for APIM policy authoring:\r\n  1. APIM evaluates expressions inside @(...) as C#. Single quotes are CHAR\r\n     literals — multi-char strings MUST use double quotes. We wrap the XML\r\n     attribute in single quotes so the inner C# can use double quotes\r\n     without entity-escaping.\r\n  2. `<base/>` is NOT allowed at GLOBAL (service) scope — global policy IS\r\n     the root, there's no parent to chain. `<base/>` only appears at\r\n     product / API / operation scope.\r\n\r\n  References (patterns inherited, code re-authored):\r\n  - https://github.com/Azure-Samples/AI-Gateway/tree/main/labs/finops-framework\r\n-->\r\n<policies>\r\n  <inbound>\r\n    <!-- Project / UseCase / CostCenter headers are required on every call.\r\n         Accept BOTH `x-project` and `x-project-name` for client-team flexibility. -->\r\n    <set-variable name='ProjectName'  value='@(context.Request.Headers.GetValueOrDefault(\"x-project\", context.Request.Headers.GetValueOrDefault(\"x-project-name\",\"unknown\")))' />\r\n    <set-variable name='UseCase'      value='@(context.Request.Headers.GetValueOrDefault(\"x-use-case\",\"unknown\"))' />\r\n    <set-variable name='CostCenter'   value='@(context.Request.Headers.GetValueOrDefault(\"x-cost-center\",\"unknown\"))' />\r\n    <set-variable name='ApimSubId'    value='@(context.Subscription?.Id ?? \"anonymous\")' />\r\n\r\n    <!-- AI Gateway built-in: emit token metrics with custom dimensions.\r\n         Per APIM schema this element is ONLY allowed in <inbound>. It hooks\r\n         the response post-processing internally. -->\r\n    <azure-openai-emit-token-metric namespace=\"AiGateway\">\r\n      <dimension name=\"ApiName\" value=\"@(context.Api.Name)\" />\r\n      <dimension name=\"OperationId\" value=\"@(context.Operation.Id)\" />\r\n      <dimension name=\"SubscriptionId\" value='@((string)context.Variables[\"ApimSubId\"])' />\r\n      <dimension name=\"ProjectName\" value='@((string)context.Variables[\"ProjectName\"])' />\r\n      <dimension name=\"UseCase\" value='@((string)context.Variables[\"UseCase\"])' />\r\n      <dimension name=\"CostCenter\" value='@((string)context.Variables[\"CostCenter\"])' />\r\n      <dimension name=\"ClientIP\" value=\"@(context.Request.IpAddress)\" />\r\n    </azure-openai-emit-token-metric>\r\n\r\n    <!-- Propagate W3C traceparent to downstream Foundry for OTel correlation -->\r\n    <set-header name=\"traceparent\" exists-action=\"skip\">\r\n      <value>@($\"00-{Guid.NewGuid():N}-{Guid.NewGuid().ToString(\"N\").Substring(0,16)}-01\")</value>\r\n    </set-header>\r\n  </inbound>\r\n\r\n  <backend />\r\n\r\n  <outbound>\r\n    <set-header name=\"x-project\" exists-action=\"override\">\r\n      <value>@((string)context.Variables[\"ProjectName\"])</value>\r\n    </set-header>\r\n    <set-header name=\"x-cost-center\" exists-action=\"override\">\r\n      <value>@((string)context.Variables[\"CostCenter\"])</value>\r\n    </set-header>\r\n  </outbound>\r\n\r\n  <on-error />\r\n</policies>\r\n",
+    "$fxv#1": "<!--\r\n  llm-content-safety.inbound.xml — INBOUND fragment\r\n\r\n  Uses APIM's built-in <llm-content-safety> policy (preview API: 2024-09-01)\r\n  to scan the user prompt + chat messages with Azure AI Content Safety.\r\n\r\n  Assembled into the API policy when enableContentSafety OR enablePromptShields\r\n  is true. Toggles:\r\n    - shield-prompt=\"true\"  -> Prompt Shields (jailbreak / indirect-injection detection)\r\n    - <categories/>          -> Hate/Sexual/Violence/SelfHarm category scoring\r\n\r\n  Backend: content-safety-backend (created in the apim module).\r\n  AuthN:   APIM MI -> \"Cognitive Services User\" role on the Content Safety\r\n           resource (or on Foundry account when Foundry's unified endpoint is used).\r\n\r\n  Threshold semantics (FourSeverityLevels): 0 = safe, 2 = low, 4 = medium, 6 = high.\r\n  __SAFETY_THRESHOLD__ default 4 blocks medium+ severity. Lower to 2 for strict mode.\r\n\r\n  NOTE: snippet only — does NOT contain <policies>/<inbound>/<base/>. The\r\n  assembler in apim-ai-api.bicep / modules/apim/main.tf injects this between\r\n  <base/> and <set-backend-service .../>.\r\n-->\r\n<llm-content-safety backend-id=\"content-safety-backend\" shield-prompt=\"__SHIELD_PROMPT__\">\r\n    <categories output-type=\"FourSeverityLevels\">\r\n        <category name=\"Hate\" threshold=\"__SAFETY_THRESHOLD__\" />\r\n        <category name=\"Sexual\" threshold=\"__SAFETY_THRESHOLD__\" />\r\n        <category name=\"SelfHarm\" threshold=\"__SAFETY_THRESHOLD__\" />\r\n        <category name=\"Violence\" threshold=\"__SAFETY_THRESHOLD__\" />\r\n    </categories>\r\n</llm-content-safety>\r\n",
+    "$fxv#2": "<!--\r\n  semantic-cache.inbound.xml — INBOUND fragment\r\n\r\n  APIM AI Gateway semantic cache LOOKUP. Pairs with semantic-cache.outbound.xml.\r\n\r\n  Requires:\r\n    - APIM external cache configured (Azure Managed Redis Enterprise with RediSearch).\r\n      Wired via Microsoft.ApiManagement/service/caches in the apim module.\r\n    - APIM backend `embeddings-backend` pointing at the Foundry account\r\n      (the cache constructs /openai/deployments/{name}/embeddings under it).\r\n    - APIM named value `azure-openai-embeddings-deployment-name` (e.g.,\r\n      text-embedding-3-large) — selects which deployment serves the cache's\r\n      similarity-embedding generation.\r\n\r\n  Vary-by includes project + use-case so two teams asking the same question\r\n  don't poison each other's cache namespace. Score 0.85 = moderately strict.\r\n\r\n  NOTE: snippet only — no <policies>/<inbound>/<base/>.\r\n-->\r\n<azure-openai-semantic-cache-lookup\r\n    score-threshold=\"0.85\"\r\n    embeddings-backend-id=\"embeddings-backend\"\r\n    embeddings-backend-auth=\"system-assigned-managed-identity\">\r\n    <vary-by>@((string)context.Variables.GetValueOrDefault(\"ProjectName\",\"unknown\"))</vary-by>\r\n    <vary-by>@((string)context.Request.Headers.GetValueOrDefault(\"x-use-case\",\"unknown\"))</vary-by>\r\n</azure-openai-semantic-cache-lookup>\r\n",
+    "$fxv#3": "<!--\r\n  semantic-cache.outbound.xml — OUTBOUND fragment\r\n\r\n  Stores the model response in the semantic cache for future lookup hits.\r\n  Pairs with semantic-cache.inbound.xml. Cache TTL = 1h.\r\n\r\n  NOTE: snippet only — no <policies>/<outbound>/<base/>.\r\n-->\r\n<azure-openai-semantic-cache-store duration=\"3600\" />\r\n",
+    "$fxv#4": "<!--\r\n  api-policy.xml.tpl — assembled API-level policy template\r\n\r\n  Placeholders (Bicep `replace()` / TF `replace()`):\r\n    __CONTENT_SAFETY_INBOUND__   -> llm-content-safety.inbound.xml or empty\r\n    __SEMANTIC_CACHE_INBOUND__   -> semantic-cache.inbound.xml or empty\r\n    __SEMANTIC_CACHE_OUTBOUND__  -> semantic-cache.outbound.xml or empty\r\n\r\n  Always-on elements:\r\n    - set-backend-service backend-id=\"foundry-openai\"\r\n    - authentication-managed-identity (Foundry MI auth)\r\n\r\n  Ordering matters: content-safety FIRST (cheapest to fail-fast),\r\n  then semantic-cache lookup (may short-circuit the backend call),\r\n  then backend routing + MI auth.\r\n-->\r\n<policies>\r\n  <inbound>\r\n    <base />\r\n    __CONTENT_SAFETY_INBOUND__\r\n    __SEMANTIC_CACHE_INBOUND__\r\n    <set-backend-service backend-id=\"foundry-openai\" />\r\n    <authentication-managed-identity resource=\"https://cognitiveservices.azure.com\" />\r\n  </inbound>\r\n  <backend><base /></backend>\r\n  <outbound>\r\n    __SEMANTIC_CACHE_OUTBOUND__\r\n    <base />\r\n  </outbound>\r\n  <on-error><base /></on-error>\r\n</policies>\r\n",
+    "$fxv#5": "<!--\r\n  product-token-limit.xml — Product-scope policy\r\n\r\n  Enforces a TPM ceiling per APIM subscription per product, with HTTP 429\r\n  on excess. Use one product per project / per cost-center for clean attribution.\r\n\r\n  IMPORTANT: APIM evaluates @(...) as C#. Single quotes are CHAR literals.\r\n  Multi-char strings inside @(...) MUST be double-quoted. We wrap XML\r\n  attributes in single quotes so the C# can use double quotes natively.\r\n\r\n  NOTE: `remaining-tokens-variable-name`, `remaining-tokens-header-name`,\r\n  and `tokens-consumed-header-name` are NOT valid at product scope per\r\n  APIM policy schema — they only work at API/operation scope. Soft-warning\r\n  via x-remaining-tokens lives in the API-level policy instead.\r\n\r\n  Tune `tokens-per-minute` per product when assigning. Default 50_000 TPM via\r\n  __TOKENS_PER_MINUTE__ placeholder, swapped at deploy time by Bicep/TF.\r\n-->\r\n<policies>\r\n  <inbound>\r\n    <base />\r\n\r\n    <!-- Hard cap to prevent runaway agents -->\r\n    <azure-openai-token-limit\r\n      counter-key=\"@(context.Subscription?.Id ?? context.Request.IpAddress)\"\r\n      tokens-per-minute=\"__TOKENS_PER_MINUTE__\"\r\n      estimate-prompt-tokens=\"false\" />\r\n  </inbound>\r\n  <backend><base /></backend>\r\n  <outbound><base /></outbound>\r\n  <on-error><base /></on-error>\r\n</policies>\r\n",
+    "_csFragment": "[if(or(parameters('enableContentSafety'), parameters('enablePromptShields')), replace(replace(variables('$fxv#1'), '__SHIELD_PROMPT__', if(parameters('enablePromptShields'), 'true', 'false')), '__SAFETY_THRESHOLD__', string(parameters('safetyThreshold'))), '')]",
+    "_scInbound": "[if(parameters('enableSemanticCache'), variables('$fxv#2'), '')]",
+    "_scOutbound": "[if(parameters('enableSemanticCache'), variables('$fxv#3'), '')]",
+    "_apiPolicy": "[replace(replace(replace(variables('$fxv#4'), '__CONTENT_SAFETY_INBOUND__', variables('_csFragment')), '__SEMANTIC_CACHE_INBOUND__', variables('_scInbound')), '__SEMANTIC_CACHE_OUTBOUND__', variables('_scOutbound'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ApiManagement/service/policies",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'policy')]",
+      "properties": {
+        "format": "rawxml",
+        "value": "[variables('$fxv#0')]"
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/backends",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'foundry-openai')]",
+      "properties": {
+        "description": "Microsoft Foundry / Azure OpenAI",
+        "url": "[format('{0}openai', parameters('foundryEndpoint'))]",
+        "protocol": "http",
+        "resourceId": "[format('{0}{1}', environment().resourceManager, substring(parameters('foundryResourceId'), 1))]",
+        "tls": {
+          "validateCertificateChain": true,
+          "validateCertificateName": true
+        },
+        "circuitBreaker": {
+          "rules": [
+            {
+              "name": "foundry-429-breaker",
+              "failureCondition": {
+                "count": 5,
+                "errorReasons": [
+                  "Server errors"
+                ],
+                "interval": "PT1M",
+                "statusCodeRanges": [
+                  {
+                    "min": 429,
+                    "max": 429
+                  }
+                ]
+              },
+              "tripDuration": "PT30S"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "condition": "[or(parameters('enableContentSafety'), parameters('enablePromptShields'))]",
+      "type": "Microsoft.ApiManagement/service/backends",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'content-safety-backend')]",
+      "properties": {
+        "description": "Azure AI Content Safety (Foundry-bundled or standalone)",
+        "url": "[format('{0}contentsafety', parameters('contentSafetyEndpoint'))]",
+        "protocol": "http",
+        "resourceId": "[format('{0}{1}', environment().resourceManager, substring(parameters('contentSafetyResourceId'), 1))]",
+        "tls": {
+          "validateCertificateChain": true,
+          "validateCertificateName": true
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enableSemanticCache')]",
+      "type": "Microsoft.ApiManagement/service/backends",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'embeddings-backend')]",
+      "properties": {
+        "description": "Foundry embeddings deployment for APIM semantic cache.",
+        "url": "[format('{0}openai', parameters('foundryEndpoint'))]",
+        "protocol": "http",
+        "resourceId": "[format('{0}{1}', environment().resourceManager, substring(parameters('foundryResourceId'), 1))]",
+        "tls": {
+          "validateCertificateChain": true,
+          "validateCertificateName": true
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enableSemanticCache')]",
+      "type": "Microsoft.ApiManagement/service/namedValues",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'azure-openai-embeddings-deployment-name')]",
+      "properties": {
+        "displayName": "azure-openai-embeddings-deployment-name",
+        "value": "[parameters('embeddingsDeploymentName')]",
+        "secret": false
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'foundry-openai')]",
+      "properties": {
+        "displayName": "Foundry OpenAI",
+        "description": "AI Gateway exposing Foundry models via MI-backed proxy.",
+        "path": "openai",
+        "protocols": [
+          "https"
+        ],
+        "subscriptionRequired": true,
+        "type": "http",
+        "serviceUrl": "[format('{0}openai', parameters('foundryEndpoint'))]",
+        "apiType": "http"
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/operations",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'foundry-openai', 'chat-completions')]",
+      "properties": {
+        "displayName": "Chat Completions",
+        "method": "POST",
+        "urlTemplate": "/deployments/{deployment-id}/chat/completions",
+        "templateParameters": [
+          {
+            "name": "deployment-id",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "request": {
+          "queryParameters": [
+            {
+              "name": "api-version",
+              "required": true,
+              "type": "string",
+              "defaultValue": "2024-10-21"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'foundry-openai')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/policies",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'foundry-openai', 'policy')]",
+      "properties": {
+        "format": "rawxml",
+        "value": "[variables('_apiPolicy')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'foundry-openai')]",
+        "[resourceId('Microsoft.ApiManagement/service/backends', parameters('apimName'), 'content-safety-backend')]",
+        "[resourceId('Microsoft.ApiManagement/service/backends', parameters('apimName'), 'embeddings-backend')]",
+        "[resourceId('Microsoft.ApiManagement/service/backends', parameters('apimName'), 'foundry-openai')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/products",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'foundry-default')]",
+      "properties": {
+        "displayName": "Foundry Default",
+        "description": "Default product for AI Gateway consumption (TPM cap parameterised).",
+        "subscriptionRequired": true,
+        "approvalRequired": false,
+        "state": "published"
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/products/apis",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'foundry-default', 'foundry-openai')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'foundry-openai')]",
+        "[resourceId('Microsoft.ApiManagement/service/products', parameters('apimName'), 'foundry-default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/products/policies",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'foundry-default', 'policy')]",
+      "properties": {
+        "format": "rawxml",
+        "value": "[replace(variables('$fxv#5'), '__TOKENS_PER_MINUTE__', string(parameters('productTokensPerMinute')))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/products', parameters('apimName'), 'foundry-default')]",
+        "[resourceId('Microsoft.ApiManagement/service/products/apis', parameters('apimName'), 'foundry-default', 'foundry-openai')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/diagnostics",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'azuremonitor')]",
+      "properties": {
+        "loggerId": "[resourceId('Microsoft.ApiManagement/service/loggers', parameters('apimName'), 'azuremonitor')]",
+        "alwaysLog": "allErrors",
+        "verbosity": "information",
+        "logClientIp": true,
+        "sampling": {
+          "samplingType": "fixed",
+          "percentage": 100
+        },
+        "frontend": {
+          "request": {
+            "headers": [
+              "x-project",
+              "x-use-case",
+              "x-cost-center",
+              "User-Agent"
+            ]
+          },
+          "response": {
+            "headers": []
+          }
+        },
+        "backend": {
+          "request": {
+            "headers": []
+          },
+          "response": {
+            "headers": [
+              "x-ms-region"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/diagnostics",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'applicationinsights')]",
+      "properties": {
+        "loggerId": "[parameters('appInsightsLoggerId')]",
+        "alwaysLog": "allErrors",
+        "httpCorrelationProtocol": "W3C",
+        "verbosity": "information",
+        "logClientIp": true,
+        "sampling": {
+          "samplingType": "fixed",
+          "percentage": 100
+        },
+        "frontend": {
+          "request": {
+            "headers": [
+              "x-project",
+              "x-use-case",
+              "x-cost-center"
+            ]
+          },
+          "response": {
+            "headers": []
+          }
+        },
+        "backend": {
+          "request": {
+            "headers": []
+          },
+          "response": {
+            "headers": [
+              "x-ms-region"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "productName": {
+      "type": "string",
+      "value": "foundry-default"
+    },
+    "apiName": {
+      "type": "string",
+      "value": "foundry-openai"
+    }
+  }
+}

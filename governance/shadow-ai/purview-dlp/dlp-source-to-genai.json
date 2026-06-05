@@ -1,0 +1,55 @@
+{
+  "_comment": "Purview DLP policy template. Detects source-code or proprietary IP being pasted into GenAI apps. Ships in simulation mode.",
+  "name": "KLZ — Block source code + IP to GenAI (SIMULATION)",
+  "description": "Detects keywords + entropy patterns typical of source code or pricing models being sent to unsanctioned generative AI services.",
+  "mode": "TestWithoutNotifications",
+  "locations": [
+    {
+      "name": "EndpointDevices",
+      "includeAll": true,
+      "includeMSEdge": true,
+      "includeChrome": true
+    }
+  ],
+  "rules": [
+    {
+      "name": "Source code + commercial IP to unsanctioned GenAI",
+      "conditions": {
+        "contentContainsAny": [
+          {
+            "type": "TrainableClassifier",
+            "name": "Source Code",
+            "_note": "Built-in Purview classifier; verify availability for your tenant."
+          },
+          {
+            "type": "KeywordDictionary",
+            "name": "KLZ Confidential Markers",
+            "keywords": [
+              "INTERNAL ONLY",
+              "KLZ CONFIDENTIAL",
+              "Cust-Restricted",
+              "API_KEY=",
+              "BEGIN PRIVATE KEY"
+            ],
+            "minCount": 1
+          }
+        ],
+        "destinationApps": {
+          "browserAccessedAny": [
+            "chat.openai.com",
+            "platform.openai.com",
+            "claude.ai",
+            "gemini.google.com",
+            "perplexity.ai",
+            "huggingface.co/chat"
+          ]
+        }
+      },
+      "actions": [
+        { "type": "Notify",   "policyTip": "KLZ: pasting source code or confidential material into unsanctioned AI services is prohibited." },
+        { "type": "Block",    "_simulationNote": "Simulation mode — counts only." },
+        { "type": "AuditLog", "destination": "Purview Activity Explorer" }
+      ]
+    }
+  ]
+}

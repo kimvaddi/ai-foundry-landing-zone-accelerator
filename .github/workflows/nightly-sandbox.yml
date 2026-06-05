@@ -1,0 +1,174 @@
+name: Nightly Sandbox Smoke Deploy
+
+# Full end-to-end deploy of the `smoke` blueprint to the sandbox sub,
+# verify outputs, then teardown. Runs nightly UTC 0700 (UK 0800, US-Eastern 0300).
+#
+# Catches:
+#  - Resource provider drift (new API versions breaking templates)
+#  - Quota exhaustion on dev sub
+#  - PE / DNS race conditions that only surface during real apply
+#  - AVM module bumps in registry that we haven't pinned
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      blueprint:
+        description: 'Blueprint to deploy + teardown'
+        required: true
+        default: 'smoke'
+        type: choice
+        options:
+          - smoke
+          - poc-standalone-spoke
+          - poc-hub-connected
+          - prod-hub-connected
+      stack:
+        description: 'IaC stack to use'
+        required: true
+        default: 'terraform'
+        type: choice
+        options:
+          - terraform
+          - bicep
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  BLUEPRINT: ${{ inputs.blueprint || 'smoke' }}
+  STACK: ${{ inputs.stack || 'terraform' }}
+
+jobs:
+  deploy-verify-teardown:
+    name: Deploy → Verify → Teardown (${{ inputs.stack || 'terraform' }} / ${{ inputs.blueprint || 'smoke' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        if: env.STACK == 'terraform'
+        with:
+          terraform_version: '1.9.8'
+          terraform_wrapper: false
+
+      - name: Install Bicep CLI
+        if: env.STACK == 'bicep'
+        run: |
+          curl -Lo bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x bicep && sudo mv bicep /usr/local/bin/
+
+      - name: Install PowerShell
+        run: |
+          sudo apt-get update && sudo apt-get install -y powershell
+
+      - name: Deploy Bicep (${{ env.BLUEPRINT }})
+        if: env.STACK == 'bicep'
+        run: |
+          # deploy.ps1 -Mode {smoke|full} routes to dev.bicepparam or full.bicepparam.
+          # For other blueprints, pass ParameterFile explicitly.
+          mode="smoke"
+          paramfile=""
+          case "$BLUEPRINT" in
+            smoke|full) mode="$BLUEPRINT" ;;
+            *) paramfile="infra/bicep/blueprints/$BLUEPRINT/$BLUEPRINT.bicepparam" ;;
+          esac
+          if [ -n "$paramfile" ]; then
+            pwsh -File scripts/deploy.ps1 -Mode full -ParameterFile "$paramfile"
+          else
+            pwsh -File scripts/deploy.ps1 -Mode "$mode"
+          fi
+
+      - name: Deploy Terraform (${{ env.BLUEPRINT }})
+        if: env.STACK == 'terraform'
+        working-directory: infra/terraform
+        run: |
+          # Resolve tfvars by blueprint name (matches scripts/parity-diff.ps1 layout)
+          case "$BLUEPRINT" in
+            smoke|poc-standalone-spoke|poc-hub-connected|prod-standalone-with-fw|prod-hub-connected)
+              tfvars="blueprints/$BLUEPRINT/$BLUEPRINT.tfvars" ;;
+            full|stage-b-toggles)
+              tfvars="parameters/$BLUEPRINT.tfvars" ;;
+            *) echo "Unknown blueprint $BLUEPRINT" && exit 1 ;;
+          esac
+          terraform init -input=false
+          terraform apply -auto-approve -input=false \
+            -var-file="$tfvars" \
+            -var="subscription_id=$AZURE_SUBSCRIPTION_ID" \
+            -var="rg_suffix=-nightly-$GITHUB_RUN_NUMBER" \
+            -var="jumpvm_admin_password=NightlyP@ssw0rd1234!" \
+            -var='buildvm_ssh_public_key=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIpwfee+5R5OboUx7eifKqYKW/WvT6XjRW1x18NxcVvk nightly@klz-finops'
+
+      - name: Smoke verify (outputs + key wiring)
+        run: |
+          pwsh -File scripts/smoke-verify.ps1 \
+            -Workload klzfin \
+            -Env dev \
+            -RgSuffix "-nightly-$GITHUB_RUN_NUMBER" \
+            -SubscriptionId "$AZURE_SUBSCRIPTION_ID"
+
+      # APIM policy smoke. Only the prod-hub-connected blueprint has APIM
+      # enabled today; for other blueprints the script exits 0 with [SKIP].
+      # When the blueprint IS expected to have APIM, set -ExpectApim so
+      # accidental config drift (APIM toggled off in tfvars) becomes a hard fail.
+      # Bicep RGs don't yet support rg_suffix, so only pass it for the TF path.
+      - name: APIM policy smoke (regression test for <forward-request /> + MI credentials)
+        run: |
+          rgSuffix=""
+          expectApim=""
+          if [ "$STACK" = "terraform" ]; then
+            rgSuffix="-nightly-$GITHUB_RUN_NUMBER"
+          fi
+          if [ "$BLUEPRINT" = "prod-hub-connected" ]; then
+            expectApim="-ExpectApim"
+          fi
+          pwsh -File scripts/smoke-policies.ps1 \
+            -Workload klzfin \
+            -Env dev \
+            -RgSuffix "$rgSuffix" \
+            -SubscriptionId "$AZURE_SUBSCRIPTION_ID" \
+            $expectApim
+
+      - name: Teardown Bicep (always, even on failure)
+        if: always() && env.STACK == 'bicep'
+        run: |
+          pwsh -File scripts/deploy.ps1 -Mode teardown
+
+      - name: Teardown Terraform (always, even on failure)
+        if: always() && env.STACK == 'terraform'
+        working-directory: infra/terraform
+        run: |
+          case "$BLUEPRINT" in
+            smoke|poc-standalone-spoke|poc-hub-connected|prod-standalone-with-fw|prod-hub-connected)
+              tfvars="blueprints/$BLUEPRINT/$BLUEPRINT.tfvars" ;;
+            full|stage-b-toggles)
+              tfvars="parameters/$BLUEPRINT.tfvars" ;;
+          esac
+          terraform destroy -auto-approve -input=false \
+            -var-file="$tfvars" \
+            -var="subscription_id=$AZURE_SUBSCRIPTION_ID" \
+            -var="rg_suffix=-nightly-$GITHUB_RUN_NUMBER" \
+            -var="jumpvm_admin_password=NightlyP@ssw0rd1234!" \
+            -var='buildvm_ssh_public_key=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIpwfee+5R5OboUx7eifKqYKW/WvT6XjRW1x18NxcVvk nightly@klz-finops'
+
+      - name: Upload deploy logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-logs-${{ env.STACK }}-${{ env.BLUEPRINT }}-${{ github.run_number }}
+          path: |
+            *.log
+            artifacts/**
+          retention-days: 14

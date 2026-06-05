@@ -1,0 +1,78 @@
+#============================================================================
+# PSRule config — klz-accelerator-finops (Bicep stack)
+#----------------------------------------------------------------------------
+# PSRule.Rules.Azure runs the AVM baseline + Microsoft Cloud Adoption
+# Framework rules against ARM JSON exported from `az bicep build`.
+#
+# Local run (from repo root):
+#   pwsh -c "Import-Module PSRule.Rules.Azure; \
+#            az bicep build --file infra/bicep/main.bicep --outfile out.json; \
+#            Invoke-PSRule -InputPath out.json -Module PSRule.Rules.Azure \
+#                          -Option ps-rule.yaml -Format File"
+#
+# CI invocation (.github/workflows/pr.yml):
+#   - uses: microsoft/ps-rule@v2.9.0
+#     with:
+#       modules: PSRule.Rules.Azure
+#       inputPath: 'out/'
+#       option: 'ps-rule.yaml'
+#       baseline: 'Azure.Default'
+#============================================================================
+
+# Use the AVM-aligned baseline (catches reliability, security, cost).
+binding:
+  targetType:
+    - resourceType
+    - type
+
+# Bicep .json output uses 'resourceType' — keep both for compatibility.
+input:
+  pathIgnore:
+    - '.terraform/'
+    - 'node_modules/'
+    - 'out/'
+    - '**/*.md'
+
+# Severity threshold for CI.
+execution:
+  inconclusive: Warn
+  notProcessedWarning: false
+  ruleInconclusive: Warn
+
+# Output formatting.
+output:
+  as: Detail
+  culture:
+    - en-US
+  outcome: Fail
+
+# AVM baseline — Microsoft.Azure.Verified-Modules.* rules.
+include:
+  module:
+    - PSRule.Rules.Azure
+
+# Project-specific rule waivers — each MUST cite a reason in `.ps-rule/options.yaml`.
+suppression:
+  # Azure.AKS.MinNodeCount: we don't ship AKS in any blueprint.
+  Azure.AKS.MinNodeCount:
+    - 'aks-*'
+
+# Rule configuration.
+configuration:
+  # Allow placeholder strings in *.sample.bicepparam.
+  AZURE_PARAMETER_FILE_EXPANSION: true
+  # Use AVM v0.x baselines for module compliance.
+  AZURE_BICEP_FILE_EXPANSION: true
+  AZURE_BICEP_FILE_EXPANSION_TIMEOUT: 30
+  AZURE_BICEP_CHECK_TOOL: true
+
+# Use the well-known Azure baseline.
+rule:
+  baseline: Azure.GA_2024_12
+  exclude:
+    # Azure.Resource.UseTags — globally enforced via our common/tags.bicep helper.
+    # Keep as advisory; rule misfires on AVM module child resources.
+    - Azure.Resource.UseTags
+    # Azure.Template.MetadataLink — applies only to legacy ARM JSON; Bicep
+    # files don't carry an external metadata link.
+    - Azure.Template.MetadataLink

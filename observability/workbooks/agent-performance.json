@@ -1,0 +1,77 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## Foundry — Agent Performance & Tool Latency\n\nBreaks down per-tool latency so you can pinpoint **which tool span is dominating end-to-end latency** (data tools, search, model, etc.).\n\nAll panels query AppDependencies (App Insights) using OpenTelemetry GenAI semantic conventions."
+      }
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          { "id": "p_timerange", "version": "KqlParameterItem/1.0", "name": "TimeRange", "type": 4, "isRequired": true, "value": { "durationMs": 86400000 }, "typeSettings": { "selectableValues": [ {"durationMs":3600000},{"durationMs":14400000},{"durationMs":86400000},{"durationMs":259200000},{"durationMs":604800000} ] } },
+          {
+            "id": "p_project",
+            "version": "KqlParameterItem/1.0",
+            "name": "Project",
+            "type": 2,
+            "isRequired": true,
+            "query": "AppDependencies\n| where TimeGenerated > ago(7d)\n| where Name startswith 'tool.' or Name startswith 'gen_ai'\n| extend Project = coalesce(tostring(Properties['gen_ai.project']), 'unknown')\n| distinct Project\n| union (datatable(Project:string)['*'])\n| order by Project asc",
+            "typeSettings": { "additionalResourceOptions": [], "showDefault": false },
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "value": "*"
+          }
+        ]
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AppDependencies\n| where TimeGenerated {TimeRange}\n| where Name startswith 'tool.' or Name startswith 'gen_ai'\n| extend Project = coalesce(tostring(Properties['gen_ai.project']), 'unknown')\n| where '{Project}' == '*' or Project == '{Project}'\n| summarize p50=percentile(DurationMs,50), p95=percentile(DurationMs,95), p99=percentile(DurationMs,99), count() by Name\n| order by p95 desc",
+        "size": 0,
+        "title": "Span latency (p50/p95/p99) — last selected window",
+        "queryType": 0,
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "p95", "formatter": 8, "formatOptions": { "palette": "redBright" } }
+          ]
+        }
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AppDependencies\n| where TimeGenerated {TimeRange}\n| where Name startswith 'tool.fabric'\n| summarize p95=percentile(DurationMs,95) by bin(TimeGenerated, 5m)\n| render timechart",
+        "size": 0,
+        "title": "Tool span p95 over time — top data-tool span (example: tool.fabric)"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AppDependencies\n| where TimeGenerated {TimeRange}\n| where Name startswith 'gen_ai.completion'\n| extend Project = coalesce(tostring(Properties['gen_ai.project']), 'unknown')\n| extend Model   = coalesce(tostring(Properties['gen_ai.request.model']), 'unknown')\n| summarize calls=count(), p95=percentile(DurationMs,95) by Project, Model\n| order by calls desc",
+        "size": 0,
+        "title": "Model call volume + p95 by project & model"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AppExceptions\n| where TimeGenerated {TimeRange}\n| where Properties['gen_ai.system'] == 'azure-openai' or Properties['span.kind'] in ('agent','tool')\n| summarize count() by Type, OuterMessage\n| top 20 by count_",
+        "size": 0,
+        "title": "Top agent / tool exceptions"
+      }
+    }
+  ],
+  "isLocked": false,
+  "fallbackResourceIds": []
+}

@@ -1,0 +1,27 @@
+<!--
+  semantic-cache.xml — APIM AI Gateway semantic cache
+
+  Caches by embedding similarity. Requires:
+    - APIM named-value `azure-openai-embeddings-deployment-name` (the embedding model used by the cache)
+    - A backend on the same APIM gateway pointing at a /embeddings endpoint
+    - `score-threshold` close to 1.0 = stricter cache hit
+-->
+<policies>
+  <inbound>
+    <base />
+
+    <azure-openai-semantic-cache-lookup
+      score-threshold="0.85"
+      embeddings-backend-id="embeddings-backend"
+      embeddings-backend-auth="system-assigned">
+      <vary-by>@((string)context.Variables.GetValueOrDefault("ProjectName","unknown"))</vary-by>
+      <vary-by>@((string)context.Request.Headers.GetValueOrDefault("x-use-case","unknown"))</vary-by>
+    </azure-openai-semantic-cache-lookup>
+  </inbound>
+  <backend><base /></backend>
+  <outbound>
+    <base />
+    <azure-openai-semantic-cache-store duration="3600" />
+  </outbound>
+  <on-error><base /></on-error>
+</policies>

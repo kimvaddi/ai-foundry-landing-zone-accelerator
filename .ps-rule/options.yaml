@@ -1,0 +1,32 @@
+#============================================================================
+# PSRule.Rules.Azure project-specific waivers + options
+#----------------------------------------------------------------------------
+# Each suppression below has a documented reason. CI rule: any new
+# suppression MUST be added to this file AND to docs/lint-baseline.md.
+#============================================================================
+
+# Resource-level waivers (regex on resource name).
+suppression:
+  # We intentionally use a single LAW per platform RG (no per-tenant isolation
+  # required for this accelerator). Rule expects > 1 workspace.
+  Azure.LogAnalytics.RetentionPeriod:
+    - 'log-*'   # workspace name pattern
+
+  # KeyVault.PurgeProtection is fine for prod, but our QA blueprints disable
+  # it to allow same-day teardown. Suppress only on QA naming pattern.
+  Azure.KeyVault.PurgeProtect:
+    - 'kv-*qa*'
+    - 'kv-*dev*'
+
+  # Storage accounts in BYOR mode use AVM defaults which trip the
+  # 'no-blob-public-access' rule false-positive on bicep dynamic blocks.
+  Azure.Storage.BlobPublicAccess:
+    - 'stkl*'   # workload prefix 'klzfin' → st-klzfin-...
+
+# Output settings.
+output:
+  as: Detail
+  banner: Default
+  format: Wide
+  culture:
+    - en-US

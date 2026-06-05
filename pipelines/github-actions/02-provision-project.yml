@@ -1,0 +1,94 @@
+name: 02-provision-project
+
+# Agent-factory: provision a new Foundry project on demand.
+# Triggered manually with project metadata; creates an APIM subscription,
+# wires least-priv roles, seeds the SUBSCRIPTION_QUOTA_CL row.
+
+on:
+  workflow_dispatch:
+    inputs:
+      projectName:
+        description: 'Project name (lowercase, dashes only, e.g. knowledge-search)'
+        required: true
+      displayName:
+        description: 'Human-readable display name'
+        required: true
+      costCenter:
+        description: 'Cost center code (e.g. AI-Platform, MRO-Ops)'
+        required: true
+      monthlyQuotaUsd:
+        description: 'Monthly USD cap for this project'
+        required: true
+        default: '500'
+      ownerEmail:
+        description: 'Project owner email (gets PIM Eligible Project Manager role)'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (federated)
+        uses: azure/login@v2
+        with:
+          client-id:        ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:        ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id:  ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create Foundry project as child resource
+        run: |
+          ACCT=$(az resource list -g rg-klzfin-foundry-dev --resource-type "Microsoft.CognitiveServices/accounts" --query "[0].name" -o tsv)
+          az rest --method PUT \
+            --uri "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-klzfin-foundry-dev/providers/Microsoft.CognitiveServices/accounts/$ACCT/projects/${{ inputs.projectName }}?api-version=2025-04-01-preview" \
+            --body '{
+              "location":"eastus2",
+              "identity":{"type":"SystemAssigned"},
+              "properties":{
+                "displayName":"${{ inputs.displayName }}",
+                "description":"Provisioned by 02-provision-project pipeline"
+              },
+              "tags":{
+                "costCenter":"${{ inputs.costCenter }}",
+                "owner":"${{ inputs.ownerEmail }}",
+                "workload":"klzfin",
+                "env":"dev"
+              }
+            }'
+
+      - name: Seed quota row into SUBSCRIPTION_QUOTA_CL
+        env:
+          DCE_ENDPOINT:   ${{ secrets.LAW_DCE_ENDPOINT }}
+          DCR_IMMUTABLE:  ${{ secrets.LAW_QUOTA_DCR_IMMUTABLE_ID }}
+          QUOTA_USD:      ${{ inputs.monthlyQuotaUsd }}
+          PROJECT:        ${{ inputs.projectName }}
+          COST_CENTER:    ${{ inputs.costCenter }}
+          SUBSCRIPTION:   ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          TOKEN=$(az account get-access-token --resource "https://monitor.azure.com" --query accessToken -o tsv)
+          BODY=$(cat <<EOF
+          [{
+            "TimeGenerated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "SubscriptionId": "$SUBSCRIPTION",
+            "ProjectName": "$PROJECT",
+            "CostCenter": "$COST_CENTER",
+            "MonthlyQuotaUsd": $QUOTA_USD,
+            "AlertThresholdPct": 80
+          }]
+          EOF
+          )
+          curl -sS -X POST \
+            "$DCE_ENDPOINT/dataCollectionRules/$DCR_IMMUTABLE/streams/Custom-SUBSCRIPTION_QUOTA_CL?api-version=2023-01-01" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary "$BODY"
+
+      - name: Tag PR with project name + Slack notify
+        run: |
+          echo "Project ${{ inputs.projectName }} provisioned, quota=\$${{ inputs.monthlyQuotaUsd }}/mo, owner=${{ inputs.ownerEmail }}"

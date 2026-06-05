@@ -1,0 +1,62 @@
+<!--
+  content-safety.xml — Calls Azure AI Content Safety on every prompt
+
+  Pre-check: blocks on Hate/Selfharm/Sexual/Violence severity >= 2.
+  Post-check (optional): scans the model response for the same categories.
+
+  Requires:
+    - named value `content-safety-endpoint`
+    - named value `content-safety-key` (or use managed identity for the auth header)
+-->
+<policies>
+  <inbound>
+    <base />
+
+    <!-- Extract user message from chat request -->
+    <set-variable name="userPrompt" value="@{
+      var body = context.Request.Body.As<JObject>(preserveContent: true);
+      var msgs = body["messages"] as JArray;
+      if (msgs == null) return string.Empty;
+      var last = msgs.Last(m => (string)m["role"] == "user");
+      return last == null ? string.Empty : (string)last["content"];
+    }" />
+
+    <send-request mode="new" response-variable-name="csResponse" timeout="10" ignore-error="false">
+      <set-url>@($"{{content-safety-endpoint}}/contentsafety/text:analyze?api-version=2024-09-01")</set-url>
+      <set-method>POST</set-method>
+      <set-header name="Ocp-Apim-Subscription-Key" exists-action="override">
+        <value>{{content-safety-key}}</value>
+      </set-header>
+      <set-header name="Content-Type" exists-action="override">
+        <value>application/json</value>
+      </set-header>
+      <set-body>@{
+        return new JObject(
+          new JProperty("text", (string)context.Variables["userPrompt"]),
+          new JProperty("categories", new JArray("Hate","SelfHarm","Sexual","Violence")),
+          new JProperty("outputType", "FourSeverityLevels")
+        ).ToString();
+      }</set-body>
+    </send-request>
+
+    <choose>
+      <when condition="@{
+        var r = ((IResponse)context.Variables["csResponse"]).Body.As<JObject>(preserveContent: true);
+        var cats = r["categoriesAnalysis"] as JArray;
+        if (cats == null) return false;
+        return cats.Any(c => (int)c["severity"] >= 2);
+      }">
+        <return-response>
+          <set-status code="400" reason="ContentBlocked" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>{ "error": { "code": "content_filtered", "message": "Input blocked by content safety policy" } }</set-body>
+        </return-response>
+      </when>
+    </choose>
+  </inbound>
+  <backend><base /></backend>
+  <outbound><base /></outbound>
+  <on-error><base /></on-error>
+</policies>

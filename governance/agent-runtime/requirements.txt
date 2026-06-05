@@ -1,0 +1,4 @@
+# KLZ agent-runtime policy: test + load dependencies
+# Pinning loose minimums; floor versions known to work with Python 3.10+.
+pyyaml>=6.0
+pytest>=7.4

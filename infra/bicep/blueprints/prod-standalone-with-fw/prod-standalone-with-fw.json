@@ -1,0 +1,140 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workload": {
+      "value": "klzfin"
+    },
+    "env": {
+      "value": "prod"
+    },
+    "location": {
+      "value": "eastus2"
+    },
+    "searchLocation": {
+      "value": "westus2"
+    },
+    "networkMode": {
+      "value": "standalone"
+    },
+    "vnetAddressSpace": {
+      "value": "10.50.0.0/20"
+    },
+    "apimPublisherLocalPart": {
+      "value": "platform"
+    },
+    "apimPublisherDomain": {
+      "value": "klzfin.com"
+    },
+    "apimPublisherName": {
+      "value": "KLZ FinOps Platform"
+    },
+    "components": {
+      "value": {
+        "bastion": {
+          "deploy": true,
+          "sku": "Standard"
+        },
+        "jumpvm": {
+          "deploy": true,
+          "sku": "Standard_B2s"
+        },
+        "buildvm": {
+          "deploy": true,
+          "sku": "Standard_B2s"
+        },
+        "appGateway": {
+          "deploy": true,
+          "wafEnabled": true,
+          "sku": "WAF_v2"
+        },
+        "containerAppsEnv": {
+          "deploy": true
+        },
+        "apim": {
+          "deploy": true,
+          "sku": "StandardV2",
+          "networkMode": "internal"
+        },
+        "standaloneSearch": {
+          "deploy": true,
+          "sku": "standard"
+        },
+        "notifications": {
+          "deploy": true
+        },
+        "otelCollector": {
+          "deploy": false
+        }
+      }
+    },
+    "tags": {
+      "value": {
+        "workload": "klzfin",
+        "env": "prod",
+        "blueprint": "prod-standalone-with-fw"
+      }
+    },
+    "modelDeployments": {
+      "value": [
+        {
+          "name": "gpt-4o",
+          "model": {
+            "format": "OpenAI",
+            "name": "gpt-4o",
+            "version": "2024-11-20"
+          },
+          "sku": {
+            "name": "GlobalStandard",
+            "capacity": 50
+          }
+        },
+        {
+          "name": "text-embedding-3-large",
+          "model": {
+            "format": "OpenAI",
+            "name": "text-embedding-3-large",
+            "version": "1"
+          },
+          "sku": {
+            "name": "Standard",
+            "capacity": 10
+          }
+        }
+      ]
+    },
+    "foundryProjects": {
+      "value": [
+        {
+          "name": "platform",
+          "displayName": "Platform team",
+          "description": "Foundry workspace for the central AI platform team."
+        }
+      ]
+    },
+    "enableFoundryAgentInjection": {
+      "value": true
+    },
+    "createFoundryCapabilityHost": {
+      "value": true
+    },
+    "enableContentSafety": {
+      "value": true
+    },
+    "enablePromptShields": {
+      "value": true
+    },
+    "safetyThreshold": {
+      "value": 4
+    },
+    "enableSemanticCache": {
+      "value": true
+    },
+    "embeddingsDeploymentName": {
+      "value": "text-embedding-3-large"
+    },
+    "apimProductTokensPerMinute": {
+      "value": 100000
+    }
+  }
+}

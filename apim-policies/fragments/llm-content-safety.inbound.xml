@@ -1,0 +1,30 @@
+<!--
+  llm-content-safety.inbound.xml — INBOUND fragment
+
+  Uses APIM's built-in <llm-content-safety> policy (preview API: 2024-09-01)
+  to scan the user prompt + chat messages with Azure AI Content Safety.
+
+  Assembled into the API policy when enableContentSafety OR enablePromptShields
+  is true. Toggles:
+    - shield-prompt="true"  -> Prompt Shields (jailbreak / indirect-injection detection)
+    - <categories/>          -> Hate/Sexual/Violence/SelfHarm category scoring
+
+  Backend: content-safety-backend (created in the apim module).
+  AuthN:   APIM MI -> "Cognitive Services User" role on the Content Safety
+           resource (or on Foundry account when Foundry's unified endpoint is used).
+
+  Threshold semantics (FourSeverityLevels): 0 = safe, 2 = low, 4 = medium, 6 = high.
+  __SAFETY_THRESHOLD__ default 4 blocks medium+ severity. Lower to 2 for strict mode.
+
+  NOTE: snippet only — does NOT contain <policies>/<inbound>/<base/>. The
+  assembler in apim-ai-api.bicep / modules/apim/main.tf injects this between
+  <base/> and <set-backend-service .../>.
+-->
+<llm-content-safety backend-id="content-safety-backend" shield-prompt="__SHIELD_PROMPT__">
+    <categories output-type="FourSeverityLevels">
+        <category name="Hate" threshold="__SAFETY_THRESHOLD__" />
+        <category name="Sexual" threshold="__SAFETY_THRESHOLD__" />
+        <category name="SelfHarm" threshold="__SAFETY_THRESHOLD__" />
+        <category name="Violence" threshold="__SAFETY_THRESHOLD__" />
+    </categories>
+</llm-content-safety>

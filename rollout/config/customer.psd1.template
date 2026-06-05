@@ -1,0 +1,72 @@
+# =============================================================================
+# KLZ Foundry Enterprise Baseline — customer rollout configuration
+# -----------------------------------------------------------------------------
+# This file is the SINGLE INPUT for every script in ../scripts/.
+# Customer: copy to `customer.psd1`, fill in your values,
+# then run scripts in numeric order (00-preflight -> 99-rollback as needed).
+#
+# This file is .gitignored so your tenant IDs and webhooks never get checked in.
+# =============================================================================
+@{
+    # -------------------------------------------------------------------------
+    # 1. CUSTOMER IDENTITY (required)
+    # -------------------------------------------------------------------------
+    TenantId       = '<your-tenant-id>'
+    SubscriptionId = '<subscription-where-foundry-lives>'
+    Location       = 'eastus2'
+
+    # -------------------------------------------------------------------------
+    # 2. MANAGEMENT-GROUP HIERARCHY (required for Phase B.1 wave 2)
+    # -------------------------------------------------------------------------
+    # ParentManagementGroupId MUST already exist in your tenant.
+    # The rollout will create a child MG underneath it.
+    # If you have no MG hierarchy, set ParentManagementGroupId = $TenantId
+    # (every tenant has a root MG whose id == tenant id).
+    ParentManagementGroupId        = '<existing-platform-mg-id>'
+    AiLandingZoneManagementGroupId = 'ai-landing-zone'
+    AiLandingZoneDisplayName       = 'AI Landing Zone'
+
+    # Foundry resource groups to move under the new AI Landing Zone MG so
+    # the policy initiative actually evaluates them. List them by name.
+    ResourceGroupsToMove = @(
+        # 'rg-yourworkload-platform-prod'
+        # 'rg-yourworkload-foundry-prod'
+    )
+
+    # -------------------------------------------------------------------------
+    # 3. OBSERVABILITY (required by DeployIfNotExists diagnostic-settings policy)
+    # -------------------------------------------------------------------------
+    # ARM resource id of an existing Log Analytics workspace in this subscription.
+    # Get it with:
+    #   az monitor log-analytics workspace show -g <rg> -n <name> --query id -o tsv
+    LogAnalyticsWorkspaceId = '<resource-id-of-existing-LAW>'
+
+    # -------------------------------------------------------------------------
+    # 4. POLICY EFFECT (required)
+    # -------------------------------------------------------------------------
+    # Audit    = log violations, allow creation  (RECOMMENDED first 2 weeks)
+    # Deny     = block violations at create time (AFTER baseline scan is clean)
+    # Disabled = policy off                       (use only for emergency rollback)
+    PolicyEffect = 'Audit'
+
+    # -------------------------------------------------------------------------
+    # 5. NOTIFICATIONS (Phase B.4, optional)
+    # -------------------------------------------------------------------------
+    # When DeployNotifications = $true, a Logic App is provisioned that
+    # accepts Action Group webhooks and posts a card to Teams.
+    # The Logic App is STILL deployed in state='Disabled' by default —
+    # set EnableLogicApp = $true to flip it to Enabled.
+    DeployNotifications = $false
+    EnableLogicApp      = $false
+    TeamsWebhookUrl     = ''   # Teams channel -> ... -> Connectors -> Incoming Webhook
+    NotificationEmails  = ''   # comma-separated, fallback only
+
+    # -------------------------------------------------------------------------
+    # 6. PHASE C — SHADOW-AI CONTROLS (optional, all default to report-only)
+    # -------------------------------------------------------------------------
+    DeployShadowAiControls = $false
+    # 'enabledForReportingButNotEnforced' = log only, do NOT block users
+    # 'enabled'                           = enforce (block / require MFA)
+    # 'disabled'                          = create the policy but turn it off
+    ConditionalAccessMode  = 'enabledForReportingButNotEnforced'
+}

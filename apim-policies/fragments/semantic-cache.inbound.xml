@@ -1,0 +1,26 @@
+<!--
+  semantic-cache.inbound.xml — INBOUND fragment
+
+  APIM AI Gateway semantic cache LOOKUP. Pairs with semantic-cache.outbound.xml.
+
+  Requires:
+    - APIM external cache configured (Azure Managed Redis Enterprise with RediSearch).
+      Wired via Microsoft.ApiManagement/service/caches in the apim module.
+    - APIM backend `embeddings-backend` pointing at the Foundry account
+      (the cache constructs /openai/deployments/{name}/embeddings under it).
+    - APIM named value `azure-openai-embeddings-deployment-name` (e.g.,
+      text-embedding-3-large) — selects which deployment serves the cache's
+      similarity-embedding generation.
+
+  Vary-by includes project + use-case so two teams asking the same question
+  don't poison each other's cache namespace. Score 0.85 = moderately strict.
+
+  NOTE: snippet only — no <policies>/<inbound>/<base/>.
+-->
+<azure-openai-semantic-cache-lookup
+    score-threshold="0.85"
+    embeddings-backend-id="embeddings-backend"
+    embeddings-backend-auth="system-assigned">
+    <vary-by>@((string)context.Variables.GetValueOrDefault("ProjectName","unknown"))</vary-by>
+    <vary-by>@((string)context.Request.Headers.GetValueOrDefault("x-use-case","unknown"))</vary-by>
+</azure-openai-semantic-cache-lookup>

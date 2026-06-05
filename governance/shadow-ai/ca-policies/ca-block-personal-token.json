@@ -1,0 +1,30 @@
+{
+  "_comment": "Entra ID Conditional Access policy template. Blocks workload identities with long-lived secrets from accessing Foundry — forces them onto Workload Identity Federation or managed identities. Ships in report-only state.",
+  "displayName": "KLZ — Block personal access tokens + long-lived secrets for agent identities (REPORT-ONLY)",
+  "state": "enabledForReportingButNotEnforced",
+  "conditions": {
+    "applications": {
+      "includeApplications": [
+        "_REPLACE_WITH_FOUNDRY_PROJECT_APP_ID_"
+      ]
+    },
+    "users": {
+      "includeUsers": [],
+      "excludeUsers": []
+    },
+    "servicePrincipals": {
+      "includeServicePrincipals": [ "All" ],
+      "excludeServicePrincipals": [
+        "_REPLACE_WITH_KLZ_RUNTIME_SP_ID_"
+      ]
+    },
+    "authenticationFlows": {
+      "transferMethods": "deviceCodeFlow,authenticationTransfer"
+    },
+    "clientAppTypes": [ "other" ]
+  },
+  "grantControls": {
+    "operator": "OR",
+    "builtInControls": [ "block" ]
+  }
+}

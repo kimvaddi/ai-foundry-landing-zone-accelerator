@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "10704063081069757928"
+    }
+  },
+  "parameters": {
+    "vnetName": {
+      "type": "string",
+      "metadata": {
+        "description": "Spoke VNet name (must exist in current RG)."
+      }
+    },
+    "subnetName": {
+      "type": "string",
+      "metadata": {
+        "description": "Subnet name to update with the route table attachment."
+      }
+    },
+    "routeTableId": {
+      "type": "string",
+      "metadata": {
+        "description": "Route table resource ID to attach. Empty string = no-op (module is gated upstream anyway)."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('vnetName'), parameters('subnetName'))]",
+      "properties": "[union(createObject('addressPrefix', reference(resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[0], split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[1]), '2024-05-01').addressPrefix, 'networkSecurityGroup', if(empty(coalesce(tryGet(reference(resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[0], split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[1]), '2024-05-01'), 'networkSecurityGroup'), createObject())), null(), createObject('id', reference(resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[0], split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[1]), '2024-05-01').networkSecurityGroup.id)), 'delegations', coalesce(tryGet(reference(resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[0], split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[1]), '2024-05-01'), 'delegations'), createArray()), 'privateEndpointNetworkPolicies', coalesce(tryGet(reference(resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[0], split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[1]), '2024-05-01'), 'privateEndpointNetworkPolicies'), 'Enabled')), if(empty(parameters('routeTableId')), createObject(), createObject('routeTable', createObject('id', parameters('routeTableId')))))]"
+    }
+  ],
+  "outputs": {
+    "subnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[0], split(format('{0}/{1}', parameters('vnetName'), parameters('subnetName')), '/')[1])]"
+    }
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workload": {
+      "value": "klzfin"
+    },
+    "env": {
+      "value": "dev"
+    },
+    "location": {
+      "value": "eastus2"
+    },
+    "searchLocation": {
+      "value": "westus2"
+    },
+    "networkMode": {
+      "value": "hub-connected"
+    },
+    "vnetAddressSpace": {
+      "value": "10.50.0.0/20"
+    },
+    "hubVnetResourceId": {
+      "value": "/subscriptions/REPLACE-WITH-HUB-SUBSCRIPTION-GUID/resourceGroups/REPLACE-WITH-HUB-RG/providers/Microsoft.Network/virtualNetworks/REPLACE-WITH-HUB-VNET-NAME"
+    },
+    "hubFirewallPrivateIp": {
+      "value": "10.0.0.4"
+    },
+    "enableForcedTunneling": {
+      "value": false
+    },
+    "createReverseHubPeer": {
+      "value": false
+    },
+    "existingPrivateDnsZones": {
+      "value": {
+        "vaultcore": "/subscriptions/REPLACE/resourceGroups/REPLACE/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net",
+        "openai": "/subscriptions/REPLACE/resourceGroups/REPLACE/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com",
+        "cognitiveServices": "/subscriptions/REPLACE/resourceGroups/REPLACE/providers/Microsoft.Network/privateDnsZones/privatelink.cognitiveservices.azure.com",
+        "search": "/subscriptions/REPLACE/resourceGroups/REPLACE/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net",
+        "blob": "/subscriptions/REPLACE/resourceGroups/REPLACE/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
+      }
+    },
+    "apimPublisherLocalPart": {
+      "value": "platform"
+    },
+    "apimPublisherDomain": {
+      "value": "contoso.com"
+    },
+    "apimPublisherName": {
+      "value": "Contoso AI Platform"
+    },
+    "components": {
+      "value": {
+        "bastion": {
+          "deploy": true,
+          "sku": "Standard"
+        },
+        "jumpvm": {
+          "deploy": true,
+          "sku": "Standard_B2s"
+        },
+        "buildvm": {
+          "deploy": false,
+          "sku": "Standard_B2s"
+        },
+        "appGateway": {
+          "deploy": true,
+          "wafEnabled": true,
+          "sku": "WAF_v2"
+        },
+        "containerAppsEnv": {
+          "deploy": true
+        },
+        "apim": {
+          "deploy": true,
+          "sku": "StandardV2",
+          "networkMode": "internal"
+        },
+        "standaloneSearch": {
+          "deploy": true,
+          "sku": "standard"
+        },
+        "notifications": {
+          "deploy": true
+        },
+        "otelCollector": {
+          "deploy": false
+        }
+      }
+    },
+    "tags": {
+      "value": {
+        "workload": "klzfin",
+        "env": "dev",
+        "owner": "platform-team",
+        "costCenter": "AI-Platform",
+        "managedBy": "klz-accelerator-finops",
+        "purpose": "enterprise-hub-connected",
+        "blueprint": "hub-connected-with-bastion-appgw"
+      }
+    },
+    "modelDeployments": {
+      "value": [
+        {
+          "name": "gpt-4o",
+          "model": {
+            "format": "OpenAI",
+            "name": "gpt-4o",
+            "version": "2024-11-20"
+          },
+          "sku": {
+            "name": "GlobalStandard",
+            "capacity": 50
+          }
+        },
+        {
+          "name": "text-embedding-3-large",
+          "model": {
+            "format": "OpenAI",
+            "name": "text-embedding-3-large",
+            "version": "1"
+          },
+          "sku": {
+            "name": "Standard",
+            "capacity": 10
+          }
+        }
+      ]
+    },
+    "foundryProjects": {
+      "value": [
+        {
+          "name": "platform",
+          "displayName": "Platform team",
+          "description": "Foundry workspace for the central AI platform team."
+        },
+        {
+          "name": "business-unit-a",
+          "displayName": "Business unit A",
+          "description": "Isolated workspace for BU-A apps and agents."
+        }
+      ]
+    }
+  }
+}

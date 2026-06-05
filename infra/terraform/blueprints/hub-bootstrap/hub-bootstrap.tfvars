@@ -1,0 +1,6 @@
+subscription_id = "<REPLACE-WITH-SUBSCRIPTION-ID>"
+workload        = "klzfin"
+environment     = "prod"
+location        = "eastus2"
+hub_address_space    = "10.0.0.0/16"
+firewall_subnet_cidr = "10.0.0.0/26"

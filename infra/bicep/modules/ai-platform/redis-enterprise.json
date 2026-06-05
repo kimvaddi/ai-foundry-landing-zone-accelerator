@@ -1,0 +1,174 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "9561323275642630381"
+    }
+  },
+  "parameters": {
+    "name": {
+      "type": "string",
+      "maxLength": 60,
+      "metadata": {
+        "description": "Cluster name. 1-60 chars, lowercase + numbers + dashes."
+      }
+    },
+    "location": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {}
+    },
+    "sku": {
+      "type": "string",
+      "defaultValue": "Enterprise_E10",
+      "allowedValues": [
+        "Enterprise_E10",
+        "Enterprise_E20",
+        "Enterprise_E50",
+        "Enterprise_E100"
+      ],
+      "metadata": {
+        "description": "SKU. E10 = smallest module-capable tier."
+      }
+    },
+    "evictionPolicy": {
+      "type": "string",
+      "defaultValue": "AllKeysLRU",
+      "allowedValues": [
+        "NoEviction",
+        "AllKeysLFU",
+        "AllKeysLRU",
+        "AllKeysRandom",
+        "VolatileLRU",
+        "VolatileLFU",
+        "VolatileTTL",
+        "VolatileRandom"
+      ],
+      "metadata": {
+        "description": "Database eviction policy. NoEviction is required for some clustering modes."
+      }
+    },
+    "clusteringPolicy": {
+      "type": "string",
+      "defaultValue": "OSSCluster",
+      "allowedValues": [
+        "OSSCluster",
+        "EnterpriseCluster"
+      ],
+      "metadata": {
+        "description": "Cluster policy. OSSCluster supports module operations; EnterpriseCluster sharding does not support modules in all combos."
+      }
+    },
+    "minimumTlsVersion": {
+      "type": "string",
+      "defaultValue": "1.2",
+      "allowedValues": [
+        "1.0",
+        "1.1",
+        "1.2"
+      ],
+      "metadata": {
+        "description": "TLS minimum version. Always pin to 1.2 — Redis Enterprise drops 1.0/1.1 in newer images anyway."
+      }
+    },
+    "keyVaultName": {
+      "type": "string",
+      "metadata": {
+        "description": "Key Vault name where the redis connection-string secret will be written. Must exist in the same resource group as this module."
+      }
+    },
+    "secretName": {
+      "type": "string",
+      "defaultValue": "redis-connection-string",
+      "metadata": {
+        "description": "Secret name to write under the Key Vault. Default `redis-connection-string`."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Cache/redisEnterprise",
+      "apiVersion": "2024-09-01-preview",
+      "name": "[parameters('name')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "sku": {
+        "name": "[parameters('sku')]"
+      },
+      "properties": {
+        "minimumTlsVersion": "[parameters('minimumTlsVersion')]"
+      }
+    },
+    {
+      "type": "Microsoft.Cache/redisEnterprise/databases",
+      "apiVersion": "2024-09-01-preview",
+      "name": "[format('{0}/{1}', parameters('name'), 'default')]",
+      "properties": {
+        "clientProtocol": "Encrypted",
+        "port": 10000,
+        "clusteringPolicy": "[parameters('clusteringPolicy')]",
+        "evictionPolicy": "[parameters('evictionPolicy')]",
+        "modules": [
+          {
+            "name": "RediSearch"
+          }
+        ],
+        "persistence": {
+          "aofEnabled": false,
+          "rdbEnabled": false
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Cache/redisEnterprise', parameters('name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2024-04-01-preview",
+      "name": "[format('{0}/{1}', parameters('keyVaultName'), parameters('secretName'))]",
+      "properties": {
+        "value": "[format('{0}:10000,password={1},ssl=True,abortConnect=False', reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('name')), '2024-09-01-preview').hostName, listKeys(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('name'), 'default'), '2024-09-01-preview').primaryKey)]",
+        "contentType": "redis-connection-string"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Cache/redisEnterprise', parameters('name'))]",
+        "[resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('name'), 'default')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "hostName": {
+      "type": "string",
+      "metadata": {
+        "description": "Hostname (FQDN) of the Redis Enterprise cluster — used to construct the APIM cache connection string."
+      },
+      "value": "[reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('name')), '2024-09-01-preview').hostName]"
+    },
+    "clusterId": {
+      "type": "string",
+      "metadata": {
+        "description": "Cluster resource ID."
+      },
+      "value": "[resourceId('Microsoft.Cache/redisEnterprise', parameters('name'))]"
+    },
+    "databaseId": {
+      "type": "string",
+      "metadata": {
+        "description": "Database resource ID."
+      },
+      "value": "[resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('name'), 'default')]"
+    },
+    "secretName": {
+      "type": "string",
+      "metadata": {
+        "description": "Key Vault secret name holding the APIM-formatted connection string. Consume via `kv.getSecret(secretName)` from the caller."
+      },
+      "value": "[parameters('secretName')]"
+    }
+  }
+}

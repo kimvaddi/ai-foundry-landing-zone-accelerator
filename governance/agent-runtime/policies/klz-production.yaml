@@ -1,0 +1,154 @@
+# =============================================================================
+# KLZ FinOps Accelerator — PRODUCTION composition
+# =============================================================================
+# Composes the PROD-ring policy: stricter lockdown than klz-baseline.yaml
+# (which targets dev/sandbox).
+#
+# Composition order (left-to-right merge, right wins on scalar/dict conflicts;
+# `policies:` and `signals.enabled` are unioned):
+#   1. enterprise          (security/compliance/audit baseline, Entra SSO, KV)
+#   2. api-gateway         (network allowlist + SSRF + TLS 1.3)
+#   3. production          (allowlist-only mode, write-block, SoD approvals)
+#   4. data-protection     (PII / financial / PHI / Azure-secret detection)
+#
+# Notes:
+#   * cost-controls.yaml is intentionally NOT included here. The dev preset
+#     ($25/day daily_spend_limit) is too tight for prod. production.yaml's
+#     own rate_limits + resource_limits govern prod throughput, and the prod
+#     spend cap is set explicitly below in the klz_prod_spend_cap policy.
+#   * The two KLZ-only policies from klz-baseline.yaml (chargeback headers
+#     and APIM-only egress) are re-asserted here so production agents
+#     inherit them without having to compose two files.
+#
+# Resolve via governance/agent-runtime/loader.py: compose_policy("klz-production").
+# =============================================================================
+
+kernel:
+  version: "1.0"
+  mode: strict
+  template: klz-production
+
+description: |
+  KLZ FinOps Accelerator PRODUCTION composition. Every agent promoted to
+  the prod ring inherits this. Stricter than klz-baseline.yaml (dev
+  preset). Pairs with Phase B (MG-scoped Azure Policy) for defense-in-
+  depth — runtime enforcement here, control-plane enforcement there.
+
+include:
+  - enterprise
+  - api-gateway
+  - production
+  - data-protection
+
+# ============================================
+# Prod-ring egress allowlist (unioned with api-gateway.yaml by loader.py)
+# ============================================
+# api-gateway.yaml hard-codes the dev FQDN apim-klzfin-dev-c6ej.azure-api.net.
+# Prod uses a different FQDN suffix, so we extend the allowlist with a glob
+# that matches any klzfin APIM instance. The loader unions network.allowlist
+# across composed files (see _UNION_LIST_KEYS in loader.py).
+network:
+  allowlist:
+    - "apim-klzfin-*.azure-api.net"
+  default_action: deny
+
+# ============================================
+# KLZ prod-specific additions
+# ============================================
+policies:
+  - name: klz_required_chargeback_headers
+    description: |
+      Same chargeback enforcement as klz-baseline.yaml — re-asserted so
+      prod agents inherit it without double-composition. SIGSTOP, not
+      SIGKILL, so a human approver can recover after the missing header
+      is added.
+    severity: medium
+    category: operational
+    require_headers:
+      - x-project-name
+      - x-use-case
+      - x-cost-center
+    action: SIGSTOP
+    message: "KLZ chargeback headers missing. Set x-project-name, x-use-case, x-cost-center on every call to APIM."
+
+  - name: klz_apim_only_egress
+    description: |
+      Re-assertion of the api-gateway allowlist with prod-specific Azure
+      FQDNs. Critical-severity SIGKILL — no recovery in prod.
+    severity: critical
+    category: security
+    allow:
+      - action: http_request
+        domains:
+          - "apim-klzfin-*.azure-api.net"
+          - "*.cognitiveservices.azure.com"
+          - "*.openai.azure.com"
+          - "*.blob.core.windows.net"
+    deny:
+      - action: http_request
+        domains: ["*"]
+    action: SIGKILL
+    message: "Shadow-AI egress detected in prod. All AI traffic in KLZ MUST go via APIM."
+
+  - name: klz_prod_spend_cap
+    description: |
+      Prod-ring spend ceiling. Higher than the $25/day dev cap because
+      prod handles real load, but still bounded to make sure runaway
+      agents trip a circuit-breaker before they trip a finance alert.
+      Tune via env var KLZ_PROD_DAILY_SPEND_USD when promoting workloads.
+    severity: high
+    category: cost
+    type: spend_limit
+    daily_limit_usd: 100
+    monthly_limit_usd: 2500
+    provider: azure_openai
+    reset_timezone: UTC
+    spend_limit:
+      daily_limit_usd: 100
+      monthly_limit_usd: 2500
+      provider: azure_openai
+      reset_timezone: UTC
+    action: SIGSTOP
+    message: "Prod daily spend cap reached. Block until next UTC midnight or human override."
+
+  - name: klz_prod_model_allowlist
+    description: |
+      Prod-ring model restriction. Only the models actually deployed to
+      aif-klzfin-prod-* may be called from prod agents. Anything else is
+      a config drift signal.
+    severity: critical
+    category: cost
+    type: model_whitelist
+    allowed_models:
+      - gpt-4o-mini
+      - gpt-4o
+      - text-embedding-3-large
+      - o3-mini
+    blocked_models:
+      - gpt-4-turbo
+      - claude-3-opus
+      - claude-3-sonnet
+      - gemini-pro
+      - llama-3
+      - mistral-large
+    model_whitelist:
+      allowed_models:
+        - gpt-4o-mini
+        - gpt-4o
+        - text-embedding-3-large
+        - o3-mini
+      blocked_models:
+        - gpt-4-turbo
+        - claude-3-opus
+        - claude-3-sonnet
+        - gemini-pro
+        - llama-3
+        - mistral-large
+    action: SIGKILL
+    message: "Model not in KLZ prod allowlist."
+
+settings:
+  human_approval_required: true
+  fail_closed: true
+  auto_continue_on_warn: false
+  debug_mode: false

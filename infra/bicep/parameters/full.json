@@ -1,0 +1,107 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workload": {
+      "value": "klzfin"
+    },
+    "env": {
+      "value": "dev"
+    },
+    "location": {
+      "value": "eastus2"
+    },
+    "searchLocation": {
+      "value": "westus2"
+    },
+    "networkMode": {
+      "value": "standalone"
+    },
+    "vnetAddressSpace": {
+      "value": "10.50.0.0/20"
+    },
+    "apimPublisherLocalPart": {
+      "value": "platform"
+    },
+    "apimPublisherDomain": {
+      "value": "klzfin.com"
+    },
+    "apimPublisherName": {
+      "value": "KLZ FinOps Platform"
+    },
+    "components": {
+      "value": {
+        "bastion": {
+          "deploy": false,
+          "sku": "Standard"
+        },
+        "jumpvm": {
+          "deploy": false,
+          "sku": "Standard_B2s"
+        },
+        "buildvm": {
+          "deploy": false,
+          "sku": "Standard_B2s"
+        },
+        "appGateway": {
+          "deploy": false,
+          "wafEnabled": true,
+          "sku": "WAF_v2"
+        },
+        "containerAppsEnv": {
+          "deploy": false
+        },
+        "apim": {
+          "deploy": true,
+          "sku": "StandardV2",
+          "networkMode": "none"
+        },
+        "standaloneSearch": {
+          "deploy": true,
+          "sku": "basic"
+        },
+        "notifications": {
+          "deploy": false
+        },
+        "otelCollector": {
+          "deploy": false
+        }
+      }
+    },
+    "tags": {
+      "value": {
+        "workload": "klzfin",
+        "env": "dev",
+        "owner": "platform-team",
+        "costCenter": "AI-Platform",
+        "managedBy": "klz-accelerator-finops",
+        "purpose": "stage-a-full-standalone"
+      }
+    },
+    "modelDeployments": {
+      "value": [
+        {
+          "name": "gpt-4o-mini",
+          "model": {
+            "format": "OpenAI",
+            "name": "gpt-4o-mini",
+            "version": "2024-07-18"
+          },
+          "sku": {
+            "name": "GlobalStandard",
+            "capacity": 10
+          }
+        }
+      ]
+    },
+    "foundryProjects": {
+      "value": [
+        {
+          "name": "default",
+          "displayName": "Default project",
+          "description": "Auto-created by klz-accelerator-finops full deploy."
+        }
+      ]
+    }
+  }
+}

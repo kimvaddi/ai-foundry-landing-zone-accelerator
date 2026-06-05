@@ -1,0 +1,38 @@
+{
+  "_comment": "Entra ID Conditional Access policy template. Forces MFA for any sign-in by a workload/agent identity (servicePrincipals) calling sanctioned AI apps. Ships in report-only state.",
+  "displayName": "KLZ — Require MFA + compliant device for agent identities accessing Foundry (REPORT-ONLY)",
+  "state": "enabledForReportingButNotEnforced",
+  "conditions": {
+    "applications": {
+      "includeApplications": [
+        "_REPLACE_WITH_FOUNDRY_PROJECT_APP_ID_",
+        "_REPLACE_WITH_APIM_GATEWAY_APP_ID_"
+      ]
+    },
+    "users": {
+      "includeUsers": [ "All" ],
+      "includeRoles": [],
+      "excludeUsers": [ "GuestsOrExternalUsers" ]
+    },
+    "servicePrincipals": {
+      "includeServicePrincipals": [
+        "_REPLACE_WITH_KLZ_RUNTIME_SP_ID_"
+      ]
+    },
+    "clientAppTypes": [ "all" ]
+  },
+  "grantControls": {
+    "operator": "AND",
+    "builtInControls": [
+      "mfa",
+      "compliantDevice"
+    ]
+  },
+  "sessionControls": {
+    "signInFrequency": {
+      "isEnabled": true,
+      "type": "hours",
+      "value": 4
+    }
+  }
+}

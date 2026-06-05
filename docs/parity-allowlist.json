@@ -1,0 +1,57 @@
+{
+  "_comment": "Cross-stack parity allowlist — known-acceptable resource count differences between TF and Bicep blueprints. Value = (TF count) - (Bicep count). Positive = TF has more; negative = Bicep has more. Each entry MUST have a justification in docs/lint-baseline.md. The 6 systemic deltas (actionGroups, dataCollectionRules, diagnosticSettings, workbooks, privateEndpoints, privateEndpoints/privateDnsZoneGroups) appear in EVERY standalone blueprint because: (1) TF wires action group, Bicep doesn't unless notifications.deploy=true; (2) TF only ports 1 of 3 FinOps DCRs; (3) Bicep applies diagnostic settings to 5 more resources; (4) Bicep has 2 workbooks (cost+traffic) vs TF 1; (5) TF skips KV PE; (6) TF inlines private_dns_zone_group{} in azurerm_private_endpoint as a sub-block rather than a separate resource.",
+
+  "_systemic_standalone": {
+    "Microsoft.Insights/actionGroups": 1,
+    "Microsoft.Insights/dataCollectionRules": -2,
+    "Microsoft.Insights/diagnosticSettings": -5,
+    "Microsoft.Insights/workbooks": -1,
+    "Microsoft.Network/privateEndpoints": -1,
+    "Microsoft.Network/privateEndpoints/privateDnsZoneGroups": -2
+  },
+
+  "smoke": {
+    "Microsoft.Insights/actionGroups": 1,
+    "Microsoft.Insights/dataCollectionRules": -2,
+    "Microsoft.Insights/diagnosticSettings": -5,
+    "Microsoft.Insights/workbooks": -1,
+    "Microsoft.Network/privateEndpoints": -1,
+    "Microsoft.Network/privateEndpoints/privateDnsZoneGroups": -2
+  },
+
+  "poc-standalone-spoke": {
+    "Microsoft.Insights/actionGroups": 1,
+    "Microsoft.Insights/dataCollectionRules": -2,
+    "Microsoft.Insights/diagnosticSettings": -5,
+    "Microsoft.Insights/workbooks": -1,
+    "Microsoft.Network/privateEndpoints": -1,
+    "Microsoft.Network/privateEndpoints/privateDnsZoneGroups": -2
+  },
+
+  "poc-hub-connected": {
+    "_comment": "Hub-connected baseline TBD — TF stack lacks hub plumbing (P9 carryover)"
+  },
+
+  "prod-standalone-with-fw": {
+    "_comment": "Both stacks defer firewall (deploy-time two-pass); baseline TBD when implemented"
+  },
+
+  "prod-hub-connected": {
+    "_comment": "Same as poc-hub-connected"
+  },
+
+  "full": {
+    "Microsoft.Insights/actionGroups": 1,
+    "Microsoft.Insights/dataCollectionRules": -2,
+    "Microsoft.Insights/diagnosticSettings": -5,
+    "Microsoft.Insights/workbooks": -1,
+    "Microsoft.Network/privateEndpoints": -1,
+    "Microsoft.Network/privateEndpoints/privateDnsZoneGroups": -2
+  },
+
+  "stage-b-toggles": {
+    "_comment": "All toggles on; baseline TBD — APIM/AppGW/Bastion add many resources"
+  }
+}
+
+

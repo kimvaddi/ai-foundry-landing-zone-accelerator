@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-09-01/policyDefinition.json#",
+  "properties": {
+    "displayName": "KLZ — Cognitive Services accounts must have public network access disabled",
+    "description": "Audits or denies any Cognitive Services / AI Foundry account whose publicNetworkAccess is not 'Disabled'. Enforce private endpoint-only data plane after Phase A.5 private endpoints are in place. Default mode is Audit; promote to Deny per ring after Audit shows a clean baseline.",
+    "metadata": {
+      "category": "AI Services",
+      "version": "1.0.0",
+      "source": "klz-accelerator-finops"
+    },
+    "mode": "Indexed",
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "defaultValue": "Audit",
+        "allowedValues": [ "Audit", "Deny", "Disabled" ],
+        "metadata": {
+          "displayName": "Effect",
+          "description": "Audit to flag, Deny to block."
+        }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.CognitiveServices/accounts"
+          },
+          {
+            "not": {
+              "field": "Microsoft.CognitiveServices/accounts/publicNetworkAccess",
+              "equals": "Disabled"
+            }
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

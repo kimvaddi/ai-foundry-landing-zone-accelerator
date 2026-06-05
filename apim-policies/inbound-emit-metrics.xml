@@ -1,0 +1,69 @@
+<!--
+  inbound-emit-metrics.xml — Service-wide AI Gateway inbound policy (global scope)
+
+  Emits per-request token + cost metrics into Application Insights with the
+  dimensions you need for chargeback: SubscriptionId, Project, UseCase, CostCenter,
+  ApiName. Pair with `product-token-limit.xml` at product scope.
+
+  IMPORTANT notes for APIM policy authoring:
+  1. APIM evaluates expressions inside @(...) as C#. Single quotes are CHAR
+     literals — multi-char strings MUST use double quotes. We wrap the XML
+     attribute in single quotes so the inner C# can use double quotes
+     without entity-escaping.
+  2. `<base/>` is NOT allowed at GLOBAL (service) scope — global policy IS
+     the root, there's no parent to chain. `<base/>` only appears at
+     product / API / operation scope.
+
+  References (patterns inherited, code re-authored):
+  - https://github.com/Azure-Samples/AI-Gateway/tree/main/labs/finops-framework
+-->
+<policies>
+  <inbound>
+    <!-- Project / UseCase / CostCenter headers are required on every call.
+         Accept BOTH `x-project` and `x-project-name` for client-team flexibility. -->
+    <set-variable name='ProjectName'  value='@(context.Request.Headers.GetValueOrDefault("x-project", context.Request.Headers.GetValueOrDefault("x-project-name","unknown")))' />
+    <set-variable name='UseCase'      value='@(context.Request.Headers.GetValueOrDefault("x-use-case","unknown"))' />
+    <set-variable name='CostCenter'   value='@(context.Request.Headers.GetValueOrDefault("x-cost-center","unknown"))' />
+    <set-variable name='ApimSubId'    value='@(context.Subscription?.Id ?? "anonymous")' />
+
+    <!-- AI Gateway built-in: emit token metrics with custom dimensions.
+         Per APIM schema this element is ONLY allowed in <inbound>. It hooks
+         the response post-processing internally. -->
+    <azure-openai-emit-token-metric namespace="AiGateway">
+      <dimension name="ApiName" value="@(context.Api.Name)" />
+      <dimension name="OperationId" value="@(context.Operation.Id)" />
+      <dimension name="SubscriptionId" value='@((string)context.Variables["ApimSubId"])' />
+      <dimension name="ProjectName" value='@((string)context.Variables["ProjectName"])' />
+      <dimension name="UseCase" value='@((string)context.Variables["UseCase"])' />
+      <dimension name="CostCenter" value='@((string)context.Variables["CostCenter"])' />
+      <dimension name="ClientIP" value="@(context.Request.IpAddress)" />
+    </azure-openai-emit-token-metric>
+
+    <!-- Propagate W3C traceparent to downstream Foundry for OTel correlation -->
+    <set-header name="traceparent" exists-action="skip">
+      <value>@($"00-{Guid.NewGuid():N}-{Guid.NewGuid().ToString("N").Substring(0,16)}-01")</value>
+    </set-header>
+  </inbound>
+
+  <!--
+    CRITICAL: empty <backend /> at GLOBAL scope means NO forwarding — APIM returns 200 OK with
+    an empty response body, silently dropping the call. The global backend section MUST contain
+    <forward-request /> explicitly (or omit the <backend> element entirely). At product/API/operation
+    scope use <backend><base /></backend> instead so the chain resolves to this global rule.
+    Validated live 2026-06-05 against APIM StandardV2 + Foundry — empty <backend/> = 200/0-byte body.
+  -->
+  <backend>
+    <forward-request />
+  </backend>
+
+  <outbound>
+    <set-header name="x-project" exists-action="override">
+      <value>@((string)context.Variables["ProjectName"])</value>
+    </set-header>
+    <set-header name="x-cost-center" exists-action="override">
+      <value>@((string)context.Variables["CostCenter"])</value>
+    </set-header>
+  </outbound>
+
+  <on-error />
+</policies>

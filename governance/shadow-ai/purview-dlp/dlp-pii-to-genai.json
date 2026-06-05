@@ -1,0 +1,41 @@
+{
+  "_comment": "Purview DLP policy template. Detects PII being typed/pasted into GenAI apps in browser. Ships in 'TestWithoutNotifications' simulation mode — change to 'Enable' only after CISO sign-off.",
+  "name": "KLZ — Block PII to GenAI (SIMULATION)",
+  "description": "Detects credit card numbers, SSNs, and customer PII patterns being sent to unsanctioned generative AI services via Edge/Chrome with Purview client.",
+  "mode": "TestWithoutNotifications",
+  "locations": [
+    {
+      "name": "EndpointDevices",
+      "includeAll": true,
+      "includeMSEdge": true,
+      "includeChrome": true
+    }
+  ],
+  "rules": [
+    {
+      "name": "PII to unsanctioned GenAI",
+      "conditions": {
+        "contentContainsAny": [
+          { "type": "SensitiveInformationType", "name": "Credit Card Number",  "minCount": 1 },
+          { "type": "SensitiveInformationType", "name": "U.S. Social Security Number (SSN)", "minCount": 1 },
+          { "type": "SensitiveInformationType", "name": "EU Passport Number", "minCount": 1 }
+        ],
+        "destinationApps": {
+          "browserAccessedAny": [
+            "chat.openai.com",
+            "platform.openai.com",
+            "claude.ai",
+            "gemini.google.com",
+            "perplexity.ai",
+            "huggingface.co/chat"
+          ]
+        }
+      },
+      "actions": [
+        { "type": "Notify",   "policyTip": "KLZ: pasting customer PII into unsanctioned AI services is not allowed." },
+        { "type": "Block",    "_simulationNote": "Block action runs in simulation under TestWithoutNotifications — counts but does not stop the user." },
+        { "type": "AuditLog", "destination": "Purview Activity Explorer" }
+      ]
+    }
+  ]
+}

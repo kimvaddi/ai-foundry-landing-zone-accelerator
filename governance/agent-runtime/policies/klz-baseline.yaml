@@ -1,0 +1,73 @@
+# =============================================================================
+# KLZ FinOps Accelerator — Landing Zone Baseline (composed policy)
+# =============================================================================
+# Composes enterprise + api-gateway + cost-controls into the single policy
+# inherited by every agent onboarded through the KLZ landing zone.
+#
+# Composition order (left-to-right merge, right wins on scalar/dict conflicts;
+# `policies:` and `signals.enabled` are unioned):
+#   1. enterprise        (security/compliance/audit baseline)
+#   2. api-gateway       (network allowlist + SSRF + TLS 1.3)
+#   3. cost-controls     (token/spend caps + model allowlist)
+#
+# This file then layers a small set of KLZ-specific policies on top.
+# Resolve via governance/agent-runtime/loader.py: compose_policy("klz-baseline").
+# =============================================================================
+
+kernel:
+  version: "1.0"
+  mode: strict
+  template: klz-baseline
+
+description: |
+  KLZ FinOps Accelerator landing zone baseline. Every agent onboarded
+  through the KLZ landing zone inherits this composed policy. Local
+  overrides go in environment-specific files that `include: [klz-baseline]`.
+
+include:
+  - enterprise
+  - api-gateway
+  - cost-controls
+
+# ============================================
+# KLZ-specific additions (layered on top of includes)
+# ============================================
+policies:
+  - name: klz_required_chargeback_headers
+    description: |
+      Every APIM-bound request from an agent MUST carry the KLZ cost-
+      attribution headers. Without them the Phase A.5 chargeback KQL
+      falls back to "unattributed" and FinOps loses visibility.
+    severity: medium
+    category: operational
+    require_headers:
+      - x-project-name
+      - x-use-case
+      - x-cost-center
+    action: SIGSTOP
+    message: "KLZ chargeback headers missing. Set x-project-name, x-use-case, x-cost-center on every call to APIM."
+
+  - name: klz_apim_only_egress
+    description: |
+      Stronger restatement of the api-gateway allowlist: any HTTP request
+      whose host is NOT *.azure-api.net or an Azure-managed AI endpoint is
+      a shadow-AI attempt. SIGKILL on first violation.
+    severity: critical
+    category: security
+    allow:
+      - action: http_request
+        domains:
+          - "*.azure-api.net"
+          - "*.cognitiveservices.azure.com"
+          - "*.openai.azure.com"
+          - "*.blob.core.windows.net"
+    deny:
+      - action: http_request
+        domains: ["*"]
+    action: SIGKILL
+    message: "Shadow-AI egress detected. All AI traffic in KLZ MUST go via APIM."
+
+settings:
+  human_approval_required: true
+  fail_closed: true
+  auto_continue_on_warn: false

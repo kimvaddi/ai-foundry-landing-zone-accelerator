@@ -1,0 +1,9 @@
+<!--
+  semantic-cache.outbound.xml — OUTBOUND fragment
+
+  Stores the model response in the semantic cache for future lookup hits.
+  Pairs with semantic-cache.inbound.xml. Cache TTL = 1h.
+
+  NOTE: snippet only — no <policies>/<outbound>/<base/>.
+-->
+<azure-openai-semantic-cache-store duration="3600" />

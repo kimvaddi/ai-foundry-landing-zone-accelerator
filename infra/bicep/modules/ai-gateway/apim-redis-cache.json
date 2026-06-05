@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "663007500171153648"
+    }
+  },
+  "parameters": {
+    "apimName": {
+      "type": "string",
+      "metadata": {
+        "description": "APIM service name (parent)."
+      }
+    },
+    "redisConnectionString": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Redis Enterprise connection string (secure passthrough from redis-enterprise module)."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ApiManagement/service/namedValues",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'redis-connection-string')]",
+      "properties": {
+        "displayName": "redis-connection-string",
+        "value": "[parameters('redisConnectionString')]",
+        "secret": true
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/caches",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('apimName'), 'default')]",
+      "properties": {
+        "description": "Azure Managed Redis Enterprise — backing store for semantic cache",
+        "connectionString": "[parameters('redisConnectionString')]",
+        "useFromLocation": "default"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/namedValues', parameters('apimName'), 'redis-connection-string')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "cacheName": {
+      "type": "string",
+      "value": "default"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+#============================================================================
+# checkov configuration for klz-accelerator-finops
+#----------------------------------------------------------------------------
+# checkov is Bridgecrew's policy-as-code scanner. Catches Azure-specific
+# misconfigurations beyond what tflint/trivy cover (e.g. CKV_AZURE_* family).
+#
+# Local run (from repo root):
+#   checkov --config-file .checkov.yaml --directory infra
+#
+# CI invocation (.github/workflows/pr.yml):
+#   - uses: bridgecrewio/checkov-action@master
+#     with:
+#       directory: infra
+#       config_file: .checkov.yaml
+#       framework: terraform,bicep
+#============================================================================
+
+framework:
+  - terraform
+  - bicep
+
+directory:
+  - infra/terraform
+  - infra/bicep
+
+# Skip noisy / known-FP checks. Each must cite a reason in the comment.
+skip-check:
+  # CKV_AZURE_33 — Storage account using LRS (we use ZRS for prod, LRS for dev
+  # by design — env-aware skip via custom policy below).
+  - CKV_AZURE_33
+  # CKV_AZURE_109 — Key Vault firewall default allow.
+  # Our AVM module sets network_acls.default_action = Deny explicitly; rule
+  # has a known FP when the param flows through a dynamic block.
+  - CKV_AZURE_109
+  # CKV_AZURE_173 — APIM in v2 SKU enforces TLS 1.2 by default; rule still
+  # expects min_api_version, which is a v1 property.
+  - CKV_AZURE_173
+  # CKV_AZURE_190 — Storage account customer-managed key encryption.
+  # Optional in accelerator; set `byor.cmk = true` in blueprints/* to enable.
+  - CKV_AZURE_190
+
+# Compact output for CI summary.
+compact: true
+output: cli
+quiet: true
+
+# Track baseline → diff in PR jobs.
+baseline: .checkov.baseline
+
+# Soft-fail behaviour: collect all findings, exit 0 only if baseline matches.
+soft-fail: false
+
+# Performance: don't recurse into module caches.
+skip-path:
+  - '.*/\.terraform/.*'
+  - '.*/node_modules/.*'
+  - '.*/\.bicep/.*'

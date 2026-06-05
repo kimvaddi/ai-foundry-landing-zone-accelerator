@@ -1,0 +1,203 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "13485197168455232079"
+    }
+  },
+  "parameters": {
+    "name": {
+      "type": "string",
+      "metadata": {
+        "description": "Container App name."
+      }
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Region; inherited from parent."
+      }
+    },
+    "environmentId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Azure Container Apps managed environment."
+      }
+    },
+    "image": {
+      "type": "string",
+      "defaultValue": "mcr.microsoft.com/azuremonitor/containerinsights/cidev/applicationinsights-opentelemetry-collector:latest",
+      "metadata": {
+        "description": "Container image. Pin a digest in prod."
+      }
+    },
+    "appInsightsConnectionString": {
+      "type": "securestring",
+      "metadata": {
+        "description": "App Insights connection string (Phase A output)."
+      }
+    },
+    "secondaryOtlpEndpoint": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional secondary OTLP endpoint (gRPC). Leave empty to skip."
+      }
+    },
+    "cpu": {
+      "type": "string",
+      "defaultValue": "0.5",
+      "metadata": {
+        "description": "CPU cores per replica."
+      }
+    },
+    "memory": {
+      "type": "string",
+      "defaultValue": "1Gi",
+      "metadata": {
+        "description": "Memory per replica."
+      }
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 0,
+      "metadata": {
+        "description": "Minimum replicas."
+      }
+    },
+    "maxReplicas": {
+      "type": "int",
+      "defaultValue": 3,
+      "minValue": 1,
+      "metadata": {
+        "description": "Maximum replicas."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Common tags."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('name')]",
+      "location": "[parameters('location')]",
+      "tags": "[union(parameters('tags'), createObject('klz:component', 'otel-collector'))]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "managedEnvironmentId": "[parameters('environmentId')]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": false,
+            "targetPort": 4317,
+            "transport": "tcp",
+            "traffic": [
+              {
+                "weight": 100,
+                "latestRevision": true
+              }
+            ],
+            "additionalPortMappings": [
+              {
+                "external": false,
+                "targetPort": 4318
+              },
+              {
+                "external": false,
+                "targetPort": 13133
+              }
+            ]
+          },
+          "secrets": [
+            {
+              "name": "appinsights-connection-string",
+              "value": "[parameters('appInsightsConnectionString')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "otel-collector",
+              "image": "[parameters('image')]",
+              "resources": {
+                "cpu": "[json(parameters('cpu'))]",
+                "memory": "[parameters('memory')]"
+              },
+              "env": [
+                {
+                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                  "secretRef": "appinsights-connection-string"
+                },
+                {
+                  "name": "KLZ_SECONDARY_OTLP_ENDPOINT",
+                  "value": "[parameters('secondaryOtlpEndpoint')]"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "tcpSocket": {
+                    "port": 13133
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 30
+                },
+                {
+                  "type": "Readiness",
+                  "tcpSocket": {
+                    "port": 13133
+                  },
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 10
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": "[parameters('minReplicas')]",
+            "maxReplicas": "[parameters('maxReplicas')]",
+            "rules": [
+              {
+                "name": "cpu-scale",
+                "custom": {
+                  "type": "cpu",
+                  "metadata": {
+                    "type": "Utilization",
+                    "value": "70"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "containerAppId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.App/containerApps', parameters('name'))]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('name')), '2024-03-01', 'full').identity.principalId]"
+    },
+    "internalFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('name')), '2024-03-01').configuration.ingress.fqdn]"
+    }
+  }
+}

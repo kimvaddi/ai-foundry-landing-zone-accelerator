@@ -1,0 +1,24 @@
+# Subscriptions to scan with scripts/brownfield-discover.ps1
+# ----------------------------------------------------------------
+# One subscription GUID per line. Lines starting with # are ignored.
+# Empty lines are ignored.
+#
+# Replace the placeholder line(s) below with your actual sub
+# IDs (one per line). Keep the first line — that is the accelerator's
+# own dev environment, used to prove the discovery script end-to-end
+# before anything ever runs against a real tenant.
+#
+# Usage:
+#   $subs = (Get-Content placeholders/subscriptions.template.txt) |
+#             Where-Object { $_ -and -not $_.StartsWith('#') }
+#   ./scripts/brownfield-discover.ps1 -SubscriptionIds ($subs -join ',')
+# ----------------------------------------------------------------
+
+# Accelerator dev environment (leave this in so the
+# script can be re-validated any time without real-tenant data):
+22222222-2222-2222-2222-222222222222
+
+# Your subscriptions — replace these lines:
+# 00000000-0000-0000-0000-000000000000   # prod-1 (e.g. Foundry prod)
+# 00000000-0000-0000-0000-000000000000   # prod-2 (e.g. data platform)
+# 00000000-0000-0000-0000-000000000000   # nonprod-1

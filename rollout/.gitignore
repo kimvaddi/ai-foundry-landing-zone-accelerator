@@ -1,0 +1,3 @@
+# Customer-specific config and captured runs never get committed.
+config/customer.psd1
+test-harness/proof/

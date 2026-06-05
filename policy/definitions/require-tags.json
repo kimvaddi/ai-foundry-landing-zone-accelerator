@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-09-01/policyDefinition.json#",
+  "name": "klz-require-tags",
+  "properties": {
+    "displayName": "KLZ — Resource must carry a specific tag",
+    "description": "Audits or denies resources missing the tag named by the 'tagName' parameter. Mirrors the canonical Azure built-in pattern (single tag name) so it stays validatable by Azure Policy — the previous array-of-tag-names pattern with current() inside a field() accessor is REJECTED by Azure ('FIELD functions cannot contain additional runtime functions'). To enforce N required tags, reference this policy N times in the Foundry Enterprise Baseline initiative (once per tag). Each reference can promote Audit\u2192Deny independently so high-priority tags (e.g. costCenter) move first.",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "metadata": {
+      "category": "Tags",
+      "version": "2.0.0",
+      "source": "klz-accelerator-finops"
+    },
+    "parameters": {
+      "tagName": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Tag name",
+          "description": "Exact tag key that MUST be present on every taggable resource."
+        }
+      },
+      "effect": {
+        "type": "String",
+        "defaultValue": "Audit",
+        "allowedValues": [ "Audit", "Deny", "Disabled" ],
+        "metadata": { "displayName": "Effect" }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "[concat('tags[', parameters('tagName'), ']')]",
+        "exists": "false"
+      },
+      "then": { "effect": "[parameters('effect')]" }
+    }
+  }
+}
+

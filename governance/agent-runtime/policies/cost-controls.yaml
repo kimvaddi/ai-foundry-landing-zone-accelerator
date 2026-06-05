@@ -1,0 +1,191 @@
+# =============================================================================
+# KLZ FinOps Accelerator — Cost Controls (agent-runtime policy)
+# =============================================================================
+# Forked from:  microsoft/agent-governance-toolkit
+#               agent-governance-python/agent-os/templates/policies/cost-controls.yaml
+# Commit:       6f94b69f4c524f5c87227db0609e3d28deba7fb7
+# Upstream:     MIT License (c) Microsoft Corporation
+#
+# KLZ deltas vs upstream:
+#   * rate_limits.providers: removed anthropic + google (Azure OpenAI only via Foundry)
+#   * rate_limits.providers.openai.daily_spend_limit_usd: 50 -> 25 (dev cap)
+#   * policies[daily_spend_limit].daily_limit_usd: 100 -> 25 (dev cap, matches APIM token-limit calibration)
+#   * policies[model_tier_control].allowed_models: replaced with KLZ-deployed model list
+#   * policies[model_tier_control].blocked_models: replaced with explicit non-KLZ set
+#   * cost_tracking.dimensions: added project_name, use_case, cost_center, subscription_id
+#                               (matches Phase A.5 chargeback schema: ProjectName/UseCase/
+#                               CostCenter/SubscriptionId headers from APIM emit-token-metric)
+#   * cost_tracking.metrics: added opentelemetry exporter (alongside prometheus)
+#                            -> ships traces into the App Insights workspace from Phase A.5b
+#   * budget_reset.monthly_budget_usd: 3000 -> 750 (dev cap)
+#   * audit.log_path: relocated under ./logs/klz/
+# =============================================================================
+
+kernel:
+  version: "1.0"
+  mode: strict
+  template: cost-controls
+
+description: |
+  KLZ-customized policy for controlling AI agent costs and preventing
+  unexpected Azure OpenAI charges. Pairs with APIM `azure-openai-token-limit`
+  policy at the resource layer (Phase A.5) and with Azure cost-tag policy
+  (Phase B). This is the agent-runtime enforcement plane.
+
+# ============================================
+# Rate Limiting Configuration
+# ============================================
+rate_limits:
+  global:
+    requests_per_minute: 100
+    requests_per_hour: 1000
+    requests_per_day: 10000
+
+  providers:
+    # KLZ deploys models via Azure OpenAI / Foundry only.
+    # Public openai.com endpoints are blocked at the api-gateway layer.
+    azure_openai:
+      requests_per_minute: 60
+      tokens_per_minute: 90000
+      max_tokens_per_request: 4096
+      daily_spend_limit_usd: 25.0
+
+# ============================================
+# Cost Policies
+# ============================================
+policies:
+  - name: max_tokens_per_request
+    description: Limit tokens per individual request
+    type: token_limit
+    max_input_tokens: 8000
+    max_output_tokens: 4000
+    action: SIGSTOP
+    message: "Request exceeds token limit. Consider chunking or summarizing."
+
+  - name: daily_token_budget
+    description: Enforce daily token budget
+    type: budget
+    daily_limit_tokens: 1000000
+    warning_threshold: 0.8
+    action: SIGKILL
+    message: "Daily token budget exhausted"
+
+  - name: daily_spend_limit
+    description: Maximum daily spend across all KLZ Azure OpenAI deployments
+    type: spend_limit
+    daily_limit_usd: 25.0
+    warning_threshold: 0.75
+    action: SIGKILL
+    message: "Daily spend limit reached (KLZ dev cap)"
+
+  - name: per_request_cost_limit
+    description: Flag expensive individual requests
+    type: cost_check
+    max_cost_per_request_usd: 1.0
+    action: SIGSTOP
+    message: "Request would cost more than $1. Requires approval."
+
+  - name: model_tier_control
+    description: Restrict to KLZ-deployed Azure OpenAI models only
+    type: model_whitelist
+    allowed_models:
+      - gpt-4o-mini
+      - gpt-4o
+      - text-embedding-3-large
+      - o3-mini
+    blocked_models:
+      - gpt-4-turbo
+      - gpt-4
+      - claude-3-opus
+      - claude-3-sonnet
+      - claude-3-haiku
+      - gemini-pro
+    action: SIGSTOP
+    message: "Model not in KLZ approved list. Allowed: gpt-4o-mini, gpt-4o, text-embedding-3-large, o3-mini."
+
+  - name: retry_budget
+    description: Limit retries to prevent cost spirals
+    type: retry_limit
+    max_retries: 3
+    retry_cooldown_seconds: 5
+    action: SIGKILL
+    message: "Retry limit exceeded"
+
+  - name: loop_detection
+    description: Detect and stop infinite loops
+    type: loop_detection
+    max_identical_requests: 5
+    time_window_seconds: 60
+    action: SIGKILL
+    message: "Loop detected - identical requests repeated"
+
+  - name: batch_size_limit
+    description: Limit batch operation sizes
+    type: batch_limit
+    max_batch_size: 100
+    action: SIGSTOP
+    message: "Batch too large. Split into smaller batches."
+
+# ============================================
+# Cost Tracking & Alerts
+# ============================================
+cost_tracking:
+  enabled: true
+  storage: "./logs/klz/cost-tracking.db"
+
+  # Dimensions match the Phase A.5 chargeback schema captured by APIM
+  # azure-openai-emit-token-metric policy and surfaced in
+  # finops/chargeback/monthly-showback.kql.
+  dimensions:
+    - agent_id
+    - model
+    - task_type
+    - date
+    - project_name      # KLZ: matches x-project-name header / ProjectName dim
+    - use_case          # KLZ: matches x-use-case header / UseCase dim
+    - cost_center       # KLZ: matches x-cost-center header / CostCenter dim
+    - subscription_id   # KLZ: matches APIM subscription / SubscriptionId dim
+
+  metrics:
+    export: prometheus
+    port: 9090
+    path: /metrics
+    # KLZ addition: also push to App Insights via OTel exporter.
+    # Operator sets OTEL_EXPORTER_OTLP_ENDPOINT to either the in-cluster
+    # OpenTelemetry collector or directly to Azure Monitor OTLP ingestion.
+    opentelemetry:
+      enabled: true
+      endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+      protocol: grpc
+
+alerts:
+  email:
+    enabled: false
+    recipients: []
+    on_threshold: 0.8
+
+  slack:
+    enabled: false
+    webhook_url: null
+    channel: "#klz-ai-costs"
+
+  webhook:
+    enabled: false
+    url: null
+
+# ============================================
+# Budget Reset Schedule
+# ============================================
+budget_reset:
+  daily_reset_time: "00:00 UTC"
+  monthly_budget_usd: 750.0    # KLZ dev cap (upstream default: 3000)
+  carry_over: false
+
+audit:
+  enabled: true
+  log_path: "./logs/klz/cost-audit.log"
+  include:
+    - all_requests
+    - cost_calculations
+    - limit_breaches
+  retention_days: 90

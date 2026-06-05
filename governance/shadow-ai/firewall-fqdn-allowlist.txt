@@ -1,0 +1,69 @@
+# KLZ Approved AI FQDN Allowlist (Phase C)
+#
+# Copy this list into your Azure Firewall / Secure Web Gateway / ZScaler /
+# Netskope / Palo Alto Prisma rule set. **This file is reference data only;
+# nothing in the repo applies it.** Operator must create the change ticket.
+#
+# Pattern: allow LIST + deny everything else in Category=GenerativeAI.
+#
+# Source of truth: Defender for Cloud Apps "Sanctioned" list — see
+# mcas-connectors.md step 2. Re-sync monthly.
+#
+# Format: one FQDN per line. Lines starting with '#' are comments.
+# Wildcards: '*.example.com' allowed where supported by your firewall.
+
+# --- Microsoft AI surfaces (sanctioned by Microsoft Enterprise Agreement) ---
+*.openai.azure.com
+*.cognitiveservices.azure.com
+*.ai.azure.com
+*.azureml.ms
+*.api.cognitive.microsoft.com
+copilot.microsoft.com
+copilot.cloud.microsoft
+m365.cloud.microsoft
+
+# --- GitHub Copilot (sanctioned if Copilot Business / Enterprise plan) ------
+github.com
+*.githubcopilot.com
+api.github.com
+
+# --- Internal / KLZ APIM endpoints (Phase A.5 deployed) ---------------------
+# Replace c6ej suffix to match your env if different.
+apim-klzfin-dev-c6ej.azure-api.net
+apim-klzfin-prod-c6ej.azure-api.net
+
+# --- HuggingFace (sanctioned for model download, NOT chat) ------------------
+huggingface.co
+*.huggingface.co
+# NOTE: huggingface.co/chat must be BLOCKED — see purview-dlp/dlp-pii-to-genai.json
+
+# --- Defender for Cloud Apps + telemetry endpoints --------------------------
+*.cloudappsecurity.com
+*.cloudapp-discovery.com
+
+# --- BLOCK these explicitly via deny rule (consumer / unsanctioned) ---------
+# DO NOT add to allow list. Listed here for operator reference only.
+#
+#   chat.openai.com               # consumer ChatGPT
+#   chatgpt.com
+#   platform.openai.com           # commercial OpenAI API; require contract review
+#   claude.ai                     # consumer Claude
+#   gemini.google.com             # consumer Gemini
+#   perplexity.ai
+#   character.ai
+#   poe.com
+#   you.com/chat
+#   pi.ai
+#   meta.ai
+#   x.ai
+#   grok.com
+#   *.replicate.com               # uncontrolled inference
+#   *.runpod.io                   # uncontrolled inference
+
+# --- Review cadence ---------------------------------------------------------
+# Re-export monthly from DCA portal. Diff against this file in PR review;
+# any new addition requires:
+#   1. Security review (CISO delegate signs off)
+#   2. Contract confirmation (procurement)
+#   3. Update to Foundry initiative parameter 'allowedModels' if the
+#      vendor provides Azure-hosted endpoints

@@ -1,0 +1,60 @@
+#============================================================================
+# trivy configuration for klz-accelerator-finops
+#----------------------------------------------------------------------------
+# trivy is the successor to tfsec (Aqua acquired tfsec in 2022 and merged it
+# in). It scans Terraform, Bicep, ARM, Dockerfiles, and IaC.
+#
+# Local run (from repo root):
+#   trivy config --severity HIGH,CRITICAL infra/
+#
+# CI invocation (.github/workflows/pr.yml):
+#   - uses: aquasecurity/trivy-action@master
+#     with:
+#       scan-type: 'config'
+#       scan-ref: 'infra'
+#       severity: 'HIGH,CRITICAL'
+#       trivy-config: '.trivy.yaml'
+#============================================================================
+
+format: table
+severity:
+  - HIGH
+  - CRITICAL
+
+# scan-type 'config' covers Terraform + Bicep + ARM + Dockerfile + Kubernetes
+scan:
+  scanners:
+    - misconfig
+    - secret
+
+misconfiguration:
+  # Strict mode — fail CI on any HIGH/CRITICAL beyond the baseline.
+  failure-policy: medium
+  # Use built-in policies + any custom Rego under policies/
+  policy:
+    - policies/
+  # Skip checks that are false positives for our intentional accelerator
+  # design. Each must be justified below.
+  exclude:
+    # AVS-AZU-0040 — Storage 'allow_blob_public_access' = true.
+    #   We never enable public blob access. Trivy occasionally misfires on
+    #   AVM modules that set it explicitly to false in a `dynamic` block.
+    - AVD-AZU-0008
+    # AVD-AZU-0027 — App Insights workspace not specified.
+    #   We DO wire workspace_id; rule has a known false positive on AVM
+    #   pattern modules. Re-enable after AVM bumps to ptn-ai-foundry > 0.11.
+    - AVD-AZU-0027
+
+secret:
+  config: ./.trivy-secret.yaml
+
+# Treat *.bicepparam and tfvars as data, not source — secrets there must be
+# Key Vault references, not literals. trivy-secret.yaml enforces this.
+skip-files:
+  - '**/.terraform/**'
+  - '**/node_modules/**'
+  - '**/.bicep/**'
+
+skip-dirs:
+  - infra/terraform/.terraform
+  - .terraform

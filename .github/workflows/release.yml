@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  release:
+    name: Release ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # all history for CHANGELOG generation
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "tag=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate tag format
+        run: |
+          if [[ ! "${{ steps.tag.outputs.tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag must match vMAJOR.MINOR.PATCH (got: ${{ steps.tag.outputs.tag }})"
+            exit 1
+          fi
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v '${{ steps.tag.outputs.tag }}' | head -1 || echo '')
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+          {
+            echo "## What's changed"
+            echo ''
+            git log "$RANGE" --pretty=format:'- %s (%h)' --no-merges
+            echo ''
+            echo ''
+            echo "## Engine signature"
+            echo ''
+            echo "- Terraform stack: \`infra/terraform/\` (${TF_RESOURCE_COUNT:-unknown} resources at \`smoke\`)"
+            echo "- Bicep stack: \`infra/bicep/\` (${BICEP_RESOURCE_COUNT:-unknown} resources at \`smoke\`)"
+            echo "- Lint baseline: see [docs/lint-baseline.md](docs/lint-baseline.md)"
+            echo ''
+            echo "## Documentation"
+            echo "- [Deployment guide](docs/deployment-guide.md)"
+            echo "- [Architecture overview](docs/architecture-overview.md)"
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.tag, '-rc') || contains(steps.tag.outputs.tag, '-beta') }}

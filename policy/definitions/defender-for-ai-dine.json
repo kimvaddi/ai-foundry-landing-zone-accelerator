@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-09-01/policyDefinition.json#",
+  "properties": {
+    "displayName": "KLZ — Microsoft Defender for AI Workloads must be enabled (AINE)",
+    "description": "AuditIfNotExists for Microsoft Defender for AI Workloads (formerly Defender for AI Services) on the subscription. The expected resource is Microsoft.Security/pricings named 'AI' with pricingTier 'Standard'. Surfaces shadow-AI activity, prompt-shield bypass attempts and other AI threat signals into Defender CSPM. This is an AuditIfNotExists definition so it never deploys anything by itself; the operator opts in via a separate DeployIfNotExists policy or manual configuration.",
+    "metadata": {
+      "category": "Security Center",
+      "version": "1.0.0",
+      "source": "klz-accelerator-finops"
+    },
+    "mode": "All",
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "defaultValue": "AuditIfNotExists",
+        "allowedValues": [ "AuditIfNotExists", "Disabled" ],
+        "metadata": {
+          "displayName": "Effect"
+        }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "equals": "Microsoft.Resources/subscriptions"
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "type": "Microsoft.Security/pricings",
+          "name": "AI",
+          "existenceCondition": {
+            "field": "Microsoft.Security/pricings/pricingTier",
+            "equals": "Standard"
+          }
+        }
+      }
+    }
+  }
+}
