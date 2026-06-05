@@ -68,6 +68,15 @@ The accelerator is **forked-from-scratch from the Microsoft AVM patterns** for `
 
 ## Architecture at a glance
 
+![Solution overview - Azure AI Foundry Landing Zone](docs/images/solution-overview.png)
+
+> Generated from [`docs/diagrams/generate.py`](docs/diagrams/generate.py) using the official Microsoft Azure architecture icon set (via [`mingrammer/diagrams`](https://diagrams.mingrammer.com/)). Regenerate with `python docs/diagrams/generate.py`.
+
+For request lifecycle and per-subnet topology, see **[docs/architecture.md](docs/architecture.md)**.
+
+<details>
+<summary>Text fallback (Mermaid source)</summary>
+
 ```mermaid
 flowchart TB
   subgraph hub["[OPTIONAL] Existing ALZ Hub (Connectivity sub)"]
@@ -129,6 +138,8 @@ flowchart TB
   Policy -.audits.-> Search
   Policy -.audits.-> KV
 ```
+
+</details>
 
 See [docs/architecture.md](docs/architecture.md) for detail (subnet map, hub-connected dataflow, sequence diagrams).
 

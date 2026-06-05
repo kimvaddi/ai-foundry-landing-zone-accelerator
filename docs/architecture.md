@@ -64,6 +64,11 @@ The accelerator's role assignments are scoped to the **target RGs only** (`rg-{w
 
 `networkMode = 'standalone'` — the accelerator creates everything end-to-end. No hub required.
 
+![Spoke topology - standalone mode](images/spoke-standalone.png)
+
+<details>
+<summary>Text fallback (Mermaid source)</summary>
+
 ```mermaid
 flowchart TB
   subgraph subSpoke["Subscription (target sub)"]
@@ -117,6 +122,8 @@ flowchart TB
 
   classDef optional fill:#fef3c7,stroke:#f59e0b,stroke-dasharray:5,color:#000
 ```
+
+</details>
 
 **Legend:** dashed/amber boxes are gated by `components.*.deploy` toggles; solid boxes deploy unconditionally.
 
@@ -195,6 +202,11 @@ The 9-subnet catalog is **always allocated in address space**, but each subnet i
 
 Below: a client app calls an agent that uses **two tools (Fabric query + AI Search)** and a **GPT model**, with APIM AI Gateway in front.
 
+![Request lifecycle through the AI Gateway](images/request-lifecycle.png)
+
+<details>
+<summary>Detailed sequence (Mermaid source)</summary>
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -225,6 +237,8 @@ sequenceDiagram
   end
   Note over APIM: All spans + metrics flow to App Insights → Agent Performance workbook
 ```
+
+</details>
 
 **Why this matters:**
 - The `emit-token-metric` policy attaches **per-request dimensions** (`Project`, `UseCase`, `CostCenter`) so the FinOps workbook can break burn down by team without sampling Cost Management.
