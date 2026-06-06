@@ -4,6 +4,12 @@
 
 [![Workflows](https://img.shields.io/badge/CI-actionlint%20%E2%9C%93-success)]() [![Parity](https://img.shields.io/badge/parity--diff-passing-success)]() [![Lint](https://img.shields.io/badge/tflint%20%2B%20PSRule-baselined-success)]() [![Status](https://img.shields.io/badge/release-v1.0--ready-blue)]()
 
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2FcreateUiDefinition.json)
+[![Deploy to Azure Gov](https://aka.ms/deploytoazuregovbutton)](https://portal.azure.us/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2FcreateUiDefinition.json)
+[![Visualize](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/visualizebutton.svg?sanitize=true)](http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2Fazuredeploy.json)
+
+> **Click-to-deploy via the Azure Portal.** The button opens a guided wizard with a blueprint picker (`smoke` / `poc-*` / `prod-*`), conditional tabs for hub VNet IDs (only shown when you pick a `hub-connected` blueprint), and per-blueprint defaults for compute, APIM, and safety toggles. Requires `Contributor` on a subscription. See [`deploy/`](deploy/) for the underlying ARM + UI artifacts.
+
 This repository ships an **opinionated, enterprise-grade landing zone** for hosting Microsoft Foundry (the Azure AI Foundry / Cognitive Services unified service) inside an Azure subscription. It is designed to be **deployed as-is for a smoke test in under 10 minutes**, or **adopted into an existing ALZ-style hub-and-spoke topology** with a parameter flip — no template rewriting.
 
 Both **Bicep** and **Terraform** are first-class — they ship the same architecture, are validated by the same CI gates, and a parity test asserts the two stacks stay in sync.
@@ -199,6 +205,8 @@ See [docs/architecture.md](docs/architecture.md) for detail (subnet map, hub-con
 ---
 
 ## Quick start (5 commands)
+
+> Prefer click-ops? Use the **[Deploy to Azure](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2FcreateUiDefinition.json)** button at the top of this README. The Portal wizard walks you through blueprint selection, hub IDs (when applicable), and VM credentials; no CLI required. The CLI flow below is the recommended path for repeatable / CI deploys.
 
 ```powershell
 # 1. Sign in + select target subscription

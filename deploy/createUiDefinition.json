@@ -1,0 +1,612 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": true,
+      "basics": {
+        "description": "Deploy the **AI Foundry Landing Zone Accelerator** (FinOps Edition). Pick a blueprint, optionally wire to an existing ALZ hub, and review before deploy. Reference architecture: [github.com/kimvaddi/ai-foundry-landing-zone-accelerator](https://github.com/kimvaddi/ai-foundry-landing-zone-accelerator).",
+        "subscription": {
+          "constraints": {
+            "validations": [
+              {
+                "permission": "Microsoft.Resources/subscriptions/resourceGroups/write",
+                "message": "Owner or Contributor on the subscription is required (this template creates resource groups)."
+              }
+            ]
+          }
+        },
+        "location": {
+          "label": "Primary region",
+          "toolTip": "Region for the foundation (LAW, App Insights, Key Vault) and Foundry account. AI Search location can be overridden in the next step."
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "workload",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Workload short name",
+        "defaultValue": "klzfin",
+        "toolTip": "3-8 lower-case chars. Used in every resource name (e.g. log-<workload>-<env>-<suffix>).",
+        "constraints": {
+          "required": true,
+          "regex": "^[a-z][a-z0-9]{2,7}$",
+          "validationMessage": "Lower-case letters/digits, 3-8 chars, starts with a letter."
+        }
+      },
+      {
+        "name": "env",
+        "type": "Microsoft.Common.DropDown",
+        "label": "Environment",
+        "defaultValue": "dev",
+        "toolTip": "Environment label baked into resource names and the `env` tag.",
+        "constraints": {
+          "required": true,
+          "allowedValues": [
+            { "label": "smoke (cheapest, ephemeral)", "value": "smoke" },
+            { "label": "dev",  "value": "dev" },
+            { "label": "test", "value": "test" },
+            { "label": "poc",  "value": "poc" },
+            { "label": "prod", "value": "prod" }
+          ]
+        }
+      },
+      {
+        "name": "costCenter",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Cost center tag",
+        "defaultValue": "ai-platform",
+        "toolTip": "Stamped onto the `costCenter` resource tag. The FinOps showback workbook groups spend by this tag."
+      }
+    ],
+    "steps": [
+      {
+        "name": "blueprint",
+        "label": "Blueprint",
+        "elements": [
+          {
+            "name": "blueprintInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "A blueprint pre-fills sane defaults for compute, APIM, and safety toggles. You can override any of them in the later steps."
+            }
+          },
+          {
+            "name": "blueprintPicker",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Blueprint",
+            "defaultValue": "smoke (~$50/mo — foundation + Foundry + Search Basic)",
+            "toolTip": "Pick a starting profile. See the README cost-guidance table for monthly cost estimates per blueprint.",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                { "label": "smoke (~$50/mo — foundation + Foundry + Search Basic)",                  "value": "smoke" },
+                { "label": "poc-standalone-spoke (~$70/mo — adds spoke VNet + 21 PDNS + PEs)",       "value": "poc-standalone-spoke" },
+                { "label": "poc-hub-connected (~$45/mo — peers to your hub, reuses central PDNS)",   "value": "poc-hub-connected" },
+                { "label": "prod-standalone-with-fw (~$1,500/mo — APIM + WAF + Bastion + VMs)",      "value": "prod-standalone-with-fw" },
+                { "label": "prod-hub-connected (~$1,400/mo — Recommended enterprise default)",       "value": "prod-hub-connected" }
+              ]
+            }
+          },
+          {
+            "name": "networkMode",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Network mode",
+            "defaultValue": "standalone (greenfield) — module creates the spoke VNet + DNS",
+            "toolTip": "standalone = the module owns the spoke VNet, 21 private DNS zones, NSGs, route tables. hub-connected = peer to an existing ALZ hub, reuse the hub's central PDNS zones.",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                { "label": "standalone (greenfield) — module creates the spoke VNet + DNS", "value": "standalone" },
+                { "label": "hub-connected (brownfield) — peer to existing ALZ hub",         "value": "hub-connected" }
+              ]
+            }
+          },
+          {
+            "name": "vnetAddressSpace",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Spoke VNet address space",
+            "defaultValue": "10.50.0.0/20",
+            "toolTip": "/20 fits all 9 subnets with room. Must not overlap with your hub's address space.",
+            "constraints": {
+              "required": true,
+              "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/([0-9]|[1-2][0-9]|3[0-2])$",
+              "validationMessage": "Enter a valid CIDR (e.g. 10.50.0.0/20)."
+            }
+          },
+          {
+            "name": "searchLocation",
+            "type": "Microsoft.Common.TextBox",
+            "label": "AI Search region (override)",
+            "defaultValue": "",
+            "toolTip": "Leave blank to co-locate with the primary region. Override only if you turn `enforceApimChokepoint` off (cross-region PE not allowed)."
+          }
+        ]
+      },
+      {
+        "name": "hub",
+        "label": "Hub (BYO)",
+        "elements": [
+          {
+            "name": "hubInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Warning",
+              "text": "Hub-connected mode requires an existing ALZ-style hub. You MUST supply the hub VNet resource ID and the resource IDs of the central private DNS zones the spoke will link to."
+            }
+          },
+          {
+            "name": "hubVnetResourceId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Hub VNet resource ID",
+            "defaultValue": "",
+            "toolTip": "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<name>",
+            "constraints": {
+              "required": true,
+              "regex": "^/subscriptions/[0-9a-f-]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+$",
+              "validationMessage": "Must be a full ARM resource ID for a Microsoft.Network/virtualNetworks resource."
+            }
+          },
+          {
+            "name": "hubFirewallPrivateIp",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Hub Azure Firewall private IP",
+            "defaultValue": "",
+            "toolTip": "Required when forced tunneling is on. Becomes the next-hop in the 0.0.0.0/0 UDR.",
+            "constraints": {
+              "regex": "^$|^([0-9]{1,3}\\.){3}[0-9]{1,3}$",
+              "validationMessage": "Leave blank or enter a valid IPv4 address."
+            }
+          },
+          {
+            "name": "enableForcedTunneling",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable forced tunneling (0/0 → hub firewall)",
+            "defaultValue": false,
+            "toolTip": "Day-0 recommendation: leave OFF, validate peering + DNS, then flip ON once hub firewall rules are in place."
+          },
+          {
+            "name": "createReverseHubPeer",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Create reverse hub → spoke peering",
+            "defaultValue": false,
+            "toolTip": "Only works for same-subscription hubs. Requires write permission on the hub resource group."
+          },
+          {
+            "name": "pdnsInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Paste the resource IDs of the central private DNS zones in your hub. The spoke will link its private endpoints to these zones (instead of creating new ones)."
+            }
+          },
+          {
+            "name": "pdnsVaultcore",
+            "type": "Microsoft.Common.TextBox",
+            "label": "privatelink.vaultcore.azure.net resource ID",
+            "defaultValue": "",
+            "toolTip": "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+          },
+          {
+            "name": "pdnsOpenai",
+            "type": "Microsoft.Common.TextBox",
+            "label": "privatelink.openai.azure.com resource ID",
+            "defaultValue": ""
+          },
+          {
+            "name": "pdnsCognitive",
+            "type": "Microsoft.Common.TextBox",
+            "label": "privatelink.cognitiveservices.azure.com resource ID",
+            "defaultValue": ""
+          },
+          {
+            "name": "pdnsSearch",
+            "type": "Microsoft.Common.TextBox",
+            "label": "privatelink.search.windows.net resource ID",
+            "defaultValue": ""
+          },
+          {
+            "name": "pdnsBlob",
+            "type": "Microsoft.Common.TextBox",
+            "label": "privatelink.blob.core.windows.net resource ID",
+            "defaultValue": ""
+          },
+          {
+            "name": "pdnsApim",
+            "type": "Microsoft.Common.TextBox",
+            "label": "privatelink.azure-api.net resource ID (APIM)",
+            "defaultValue": "",
+            "toolTip": "Only required if you deploy APIM in `internal` mode."
+          },
+          {
+            "name": "pdnsCosmos",
+            "type": "Microsoft.Common.TextBox",
+            "label": "privatelink.documents.azure.com resource ID (Cosmos)",
+            "defaultValue": "",
+            "toolTip": "Only required if a Foundry project enables Agent Service capability host."
+          }
+        ],
+        "visible": "[equals(steps('blueprint').networkMode, 'hub-connected')]"
+      },
+      {
+        "name": "components",
+        "label": "Components",
+        "elements": [
+          {
+            "name": "componentsInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Defaults below reflect the selected blueprint. Toggle to override. AI Search is always on."
+            }
+          },
+          {
+            "name": "apimDeploy",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Deploy APIM AI Gateway",
+            "defaultValue": "[or(startsWith(steps('blueprint').blueprintPicker, 'prod-'), false)]",
+            "toolTip": "Provisions an APIM StandardV2 instance with token-limit, semantic-cache, content-safety, and emit-token-metric policies. Required for the chokepoint pattern."
+          },
+          {
+            "name": "apimNetworkMode",
+            "type": "Microsoft.Common.DropDown",
+            "label": "APIM VNet mode",
+            "defaultValue": "internal (private, requires VNet line-of-sight)",
+            "constraints": {
+              "allowedValues": [
+                { "label": "internal (private, requires VNet line-of-sight)", "value": "internal" },
+                { "label": "external (public gateway + admin private)",       "value": "external" },
+                { "label": "none (no VNet integration — dev only)",           "value": "none" }
+              ]
+            },
+            "visible": "[steps('components').apimDeploy]"
+          },
+          {
+            "name": "enforceApimChokepoint",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enforce APIM as the SINGLE chokepoint",
+            "defaultValue": "[and(steps('components').apimDeploy, startsWith(steps('blueprint').blueprintPicker, 'prod-'))]",
+            "toolTip": "Sets Foundry + Search publicNetworkAccess=Disabled, attaches a Search PE, and locks NSGs so ONLY the APIM subnet can reach the PE subnet. Recommended enterprise default. Requires APIM in internal/external mode.",
+            "visible": "[steps('components').apimDeploy]"
+          },
+          {
+            "name": "bastionDeploy",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Deploy Azure Bastion",
+            "defaultValue": "[startsWith(steps('blueprint').blueprintPicker, 'prod-')]",
+            "toolTip": "Standard SKU Bastion in the spoke. Required to RDP/SSH into the jump or build VMs."
+          },
+          {
+            "name": "jumpvmDeploy",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Deploy Windows jump VM",
+            "defaultValue": "[startsWith(steps('blueprint').blueprintPicker, 'prod-')]",
+            "toolTip": "Standard_B2s Windows VM in the JumpboxSubnet. Reached via Bastion."
+          },
+          {
+            "name": "buildvmDeploy",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Deploy Linux build VM (CI runner)",
+            "defaultValue": "[equals(steps('blueprint').blueprintPicker, 'prod-standalone-with-fw')]",
+            "toolTip": "Standard_B2s Linux VM in the BuildAgentSubnet. SSH key required."
+          },
+          {
+            "name": "appGatewayDeploy",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Deploy Application Gateway (WAF_v2)",
+            "defaultValue": "[startsWith(steps('blueprint').blueprintPicker, 'prod-')]",
+            "toolTip": "WAF v2 in front of APIM (or your app). Public IP + managed cert."
+          },
+          {
+            "name": "caeDeploy",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Deploy Container Apps Environment",
+            "defaultValue": "[or(equals(steps('blueprint').blueprintPicker, 'poc-hub-connected'), startsWith(steps('blueprint').blueprintPicker, 'prod-'))]",
+            "toolTip": "Internal CAE in the ContainerAppEnvironmentSubnet. Hosts agent runtimes."
+          },
+          {
+            "name": "standaloneSearchSku",
+            "type": "Microsoft.Common.DropDown",
+            "label": "AI Search SKU",
+            "defaultValue": "basic (cheap, single replica)",
+            "constraints": {
+              "allowedValues": [
+                { "label": "basic (cheap, single replica)",  "value": "basic" },
+                { "label": "standard (HA, 3 replicas)",      "value": "standard" }
+              ]
+            }
+          },
+          {
+            "name": "notificationsDeploy",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Deploy Teams notifications (Logic App)",
+            "defaultValue": "[startsWith(steps('blueprint').blueprintPicker, 'prod-')]",
+            "toolTip": "Logic App that posts an Adaptive Card to a Teams channel via Workflows Incoming Webhook. Ships disabled."
+          },
+          {
+            "name": "enableFoundryAgentInjection",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable Foundry Agent Service injection",
+            "defaultValue": "[or(equals(steps('blueprint').blueprintPicker, 'poc-hub-connected'), startsWith(steps('blueprint').blueprintPicker, 'prod-'))]",
+            "toolTip": "Registers the AIFoundrySubnet on the Foundry account so the Standard Agent Service can inject. Requires AKS GPU SKU capacity in the chosen region."
+          },
+          {
+            "name": "createFoundryCapabilityHost",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Create Foundry account-level capability host (Agents)",
+            "defaultValue": "[startsWith(steps('blueprint').blueprintPicker, 'prod-')]",
+            "toolTip": "Required for the Standard Agent Service to host agents. Implies agent injection.",
+            "visible": "[steps('components').enableFoundryAgentInjection]"
+          }
+        ]
+      },
+      {
+        "name": "compute",
+        "label": "Compute credentials",
+        "elements": [
+          {
+            "name": "computeInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Warning",
+              "text": "These secrets are passed via Secure Strings — never logged. They are required when the corresponding VM is deployed."
+            }
+          },
+          {
+            "name": "jumpvmAdminPassword",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Jump VM admin password",
+              "confirmPassword": "Confirm password"
+            },
+            "toolTip": "Local admin password for the Windows jump VM. Min 12 chars, 3 of 4 categories (upper, lower, digit, symbol).",
+            "constraints": {
+              "required": true,
+              "regex": "^(?=.{12,})((?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])|(?=.*[A-Z])(?=.*[a-z])(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9])).*$",
+              "validationMessage": "Min 12 chars, must include 3 of: upper, lower, digit, symbol."
+            },
+            "options": { "hideConfirmation": false },
+            "visible": "[steps('components').jumpvmDeploy]"
+          },
+          {
+            "name": "buildvmSshPublicKey",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Build VM SSH public key",
+            "defaultValue": "",
+            "toolTip": "OpenSSH single-line format. Generate with: ssh-keygen -t ed25519 -C build-vm",
+            "constraints": {
+              "required": true,
+              "regex": "^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/=]+( .+)?$",
+              "validationMessage": "Must be a valid OpenSSH public key line (ssh-rsa / ssh-ed25519 / ecdsa-sha2-*)."
+            },
+            "visible": "[steps('components').buildvmDeploy]"
+          }
+        ],
+        "visible": "[or(steps('components').jumpvmDeploy, steps('components').buildvmDeploy)]"
+      },
+      {
+        "name": "apim",
+        "label": "APIM AI Gateway",
+        "elements": [
+          {
+            "name": "apimInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "APIM publisher details + the AI-Gateway safety/cache policies that get applied to the foundry-default product."
+            }
+          },
+          {
+            "name": "apimPublisherLocalPart",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Publisher email (local part, before @)",
+            "defaultValue": "platform",
+            "constraints": { "required": true, "regex": "^[A-Za-z0-9._%+-]+$" }
+          },
+          {
+            "name": "apimPublisherDomain",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Publisher email domain (after @)",
+            "defaultValue": "contoso.com",
+            "constraints": { "required": true, "regex": "^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$" }
+          },
+          {
+            "name": "apimPublisherName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Publisher display name",
+            "defaultValue": "AI Platform",
+            "constraints": { "required": true }
+          },
+          {
+            "name": "apimProductTokensPerMinute",
+            "type": "Microsoft.Common.Slider",
+            "label": "Token rate limit (TPM) on foundry-default product",
+            "defaultValue": 100000,
+            "min": 1000,
+            "max": 500000,
+            "showStepMarkers": false,
+            "toolTip": "Templated into product-token-limit.xml. Above this, APIM returns 429."
+          },
+          {
+            "name": "enableContentSafety",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable Azure AI Content Safety (Hate/Sexual/Violence/SelfHarm)",
+            "defaultValue": true
+          },
+          {
+            "name": "enablePromptShields",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable Prompt Shields (jailbreak detection)",
+            "defaultValue": true
+          },
+          {
+            "name": "safetyThreshold",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Content Safety severity threshold",
+            "defaultValue": "4 — block medium+ severity (recommended)",
+            "constraints": {
+              "allowedValues": [
+                { "label": "0 — block all (most strict)",                "value": 0 },
+                { "label": "2 — block low+ severity",                    "value": 2 },
+                { "label": "4 — block medium+ severity (recommended)",   "value": 4 },
+                { "label": "6 — block only high severity (most lenient)", "value": 6 }
+              ]
+            },
+            "visible": "[or(steps('apim').enableContentSafety, steps('apim').enablePromptShields)]"
+          },
+          {
+            "name": "enableSemanticCache",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable APIM semantic cache (provisions Azure Managed Redis)",
+            "defaultValue": "[startsWith(steps('blueprint').blueprintPicker, 'prod-')]",
+            "toolTip": "Provisions Azure Managed Redis (Balanced_B0) + APIM external cache + embeddings backend. ~60-80% cost savings on repeat prompts."
+          },
+          {
+            "name": "embeddingsDeploymentName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Embeddings deployment name (for semantic cache)",
+            "defaultValue": "text-embedding-3-large",
+            "toolTip": "Must match a model deployment configured below.",
+            "visible": "[steps('apim').enableSemanticCache]"
+          }
+        ],
+        "visible": "[steps('components').apimDeploy]"
+      },
+      {
+        "name": "modelsAndProjects",
+        "label": "Models & Projects",
+        "elements": [
+          {
+            "name": "modelsInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "These are passed as JSON arrays directly to the template. Edit in place — the defaults reflect the selected blueprint."
+            }
+          },
+          {
+            "name": "modelDeployments",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Model deployments (JSON array)",
+            "multiLine": true,
+            "defaultValue": "[if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '[{\"name\":\"gpt-4o\",\"model\":{\"format\":\"OpenAI\",\"name\":\"gpt-4o\",\"version\":\"2024-11-20\"},\"sku\":{\"name\":\"GlobalStandard\",\"capacity\":50}},{\"name\":\"text-embedding-3-large\",\"model\":{\"format\":\"OpenAI\",\"name\":\"text-embedding-3-large\",\"version\":\"1\"},\"sku\":{\"name\":\"Standard\",\"capacity\":10}}]', '[{\"name\":\"gpt-4o-mini\",\"model\":{\"format\":\"OpenAI\",\"name\":\"gpt-4o-mini\",\"version\":\"2024-07-18\"},\"sku\":{\"name\":\"GlobalStandard\",\"capacity\":10}}]')]",
+            "toolTip": "Array of { name, model:{format,name,version}, sku:{name,capacity} } objects.",
+            "constraints": {
+              "required": true,
+              "regex": "^\\s*\\[.*\\]\\s*$",
+              "validationMessage": "Must be a JSON array."
+            }
+          },
+          {
+            "name": "foundryProjects",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Foundry projects (JSON array)",
+            "multiLine": true,
+            "defaultValue": "[if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '[{\"name\":\"platform\",\"displayName\":\"Platform team\",\"description\":\"Foundry workspace for the central AI platform team.\"},{\"name\":\"business-unit-a\",\"displayName\":\"Business unit A\",\"description\":\"Isolated workspace for BU-A apps and agents.\"}]', '[{\"name\":\"default\",\"displayName\":\"Default project\",\"description\":\"Foundry project.\"}]')]",
+            "toolTip": "Array of { name, displayName, description } objects.",
+            "constraints": {
+              "required": true,
+              "regex": "^\\s*\\[.*\\]\\s*$",
+              "validationMessage": "Must be a JSON array."
+            }
+          }
+        ]
+      },
+      {
+        "name": "notifications",
+        "label": "Notifications",
+        "elements": [
+          {
+            "name": "notificationsInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Optional — leave blank to skip. The Logic App always ships in state=Disabled; you can flip it on after wiring the webhook."
+            }
+          },
+          {
+            "name": "enableNotificationsLogicApp",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Set Logic App state to Enabled on deploy",
+            "defaultValue": false
+          },
+          {
+            "name": "teamsWebhookUrl",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Teams Workflows Incoming Webhook URL",
+              "confirmPassword": "Confirm URL"
+            },
+            "toolTip": "From Teams channel → Workflows → 'Post to a channel when a webhook request is received'. SecureString — never logged.",
+            "options": { "hideConfirmation": true },
+            "constraints": {
+              "required": false,
+              "regex": "^$|^https://[^\\s]+\\.webhook\\.office\\.com/.+$",
+              "validationMessage": "Leave blank or paste a valid Teams workflow webhook URL."
+            }
+          },
+          {
+            "name": "notificationEmails",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Fallback notification emails (comma-separated)",
+            "defaultValue": "",
+            "toolTip": "Optional. e.g. ai-platform@contoso.com,secops@contoso.com"
+          }
+        ],
+        "visible": "[steps('components').notificationsDeploy]"
+      }
+    ],
+    "outputs": {
+      "workload":                       "[basics('workload')]",
+      "env":                            "[basics('env')]",
+      "location":                       "[location()]",
+      "searchLocation":                 "[if(empty(steps('blueprint').searchLocation), location(), steps('blueprint').searchLocation)]",
+      "tags":                           "[createObject('workload', basics('workload'), 'env', basics('env'), 'costCenter', basics('costCenter'), 'blueprint', steps('blueprint').blueprintPicker, 'managedBy', 'klz-accelerator')]",
+      "networkMode":                    "[steps('blueprint').networkMode]",
+      "vnetAddressSpace":               "[steps('blueprint').vnetAddressSpace]",
+      "hubVnetResourceId":              "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').hubVnetResourceId, '')]",
+      "hubFirewallPrivateIp":           "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').hubFirewallPrivateIp, '')]",
+      "enableForcedTunneling":          "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').enableForcedTunneling, false)]",
+      "createReverseHubPeer":           "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').createReverseHubPeer, false)]",
+      "existingPrivateDnsZones":        "[if(equals(steps('blueprint').networkMode, 'hub-connected'), createObject('vaultcore', steps('hub').pdnsVaultcore, 'openai', steps('hub').pdnsOpenai, 'cognitiveServices', steps('hub').pdnsCognitive, 'search', steps('hub').pdnsSearch, 'blob', steps('hub').pdnsBlob, 'apim', steps('hub').pdnsApim, 'cosmosSql', steps('hub').pdnsCosmos), createObject())]",
+      "enforceApimChokepoint":          "[and(steps('components').apimDeploy, coalesce(steps('components').enforceApimChokepoint, false))]",
+      "allowCaeBypass":                 false,
+      "allowAgentSubnetBypass":         true,
+      "components":                     "[createObject('bastion', createObject('deploy', steps('components').bastionDeploy, 'sku', 'Standard'), 'jumpvm', createObject('deploy', steps('components').jumpvmDeploy, 'sku', 'Standard_B2s'), 'buildvm', createObject('deploy', steps('components').buildvmDeploy, 'sku', 'Standard_B2s'), 'appGateway', createObject('deploy', steps('components').appGatewayDeploy, 'wafEnabled', true, 'sku', 'WAF_v2'), 'containerAppsEnv', createObject('deploy', steps('components').caeDeploy), 'apim', createObject('deploy', steps('components').apimDeploy, 'sku', 'StandardV2', 'networkMode', if(steps('components').apimDeploy, steps('components').apimNetworkMode, 'none')), 'standaloneSearch', createObject('deploy', true, 'sku', steps('components').standaloneSearchSku), 'notifications', createObject('deploy', steps('components').notificationsDeploy), 'otelCollector', createObject('deploy', false))]",
+      "containerAppsEnvInternal":       true,
+      "enableFoundryAgentInjection":    "[steps('components').enableFoundryAgentInjection]",
+      "createFoundryCapabilityHost":    "[and(steps('components').enableFoundryAgentInjection, coalesce(steps('components').createFoundryCapabilityHost, false))]",
+      "foundryByorConnections":         [],
+      "autoWireSearchConnection":       true,
+      "modelDeployments":               "[parse(steps('modelsAndProjects').modelDeployments)]",
+      "foundryProjects":                "[parse(steps('modelsAndProjects').foundryProjects)]",
+      "apimPublisherLocalPart":         "[if(steps('components').apimDeploy, steps('apim').apimPublisherLocalPart, 'platform')]",
+      "apimPublisherDomain":            "[if(steps('components').apimDeploy, steps('apim').apimPublisherDomain, 'example.com')]",
+      "apimPublisherName":              "[if(steps('components').apimDeploy, steps('apim').apimPublisherName, 'AI Platform')]",
+      "apimProductTokensPerMinute":     "[if(steps('components').apimDeploy, int(steps('apim').apimProductTokensPerMinute), 50000)]",
+      "enableContentSafety":            "[and(steps('components').apimDeploy, coalesce(steps('apim').enableContentSafety, false))]",
+      "enablePromptShields":            "[and(steps('components').apimDeploy, coalesce(steps('apim').enablePromptShields, false))]",
+      "safetyThreshold":                "[if(steps('components').apimDeploy, int(coalesce(steps('apim').safetyThreshold, 4)), 4)]",
+      "enableSemanticCache":            "[and(steps('components').apimDeploy, coalesce(steps('apim').enableSemanticCache, false))]",
+      "embeddingsDeploymentName":       "[if(steps('components').apimDeploy, steps('apim').embeddingsDeploymentName, 'text-embedding-3-large')]",
+      "deployNotifications":            "[steps('components').notificationsDeploy]",
+      "enableNotificationsLogicApp":    "[and(steps('components').notificationsDeploy, coalesce(steps('notifications').enableNotificationsLogicApp, false))]",
+      "teamsWebhookUrl":                "[if(steps('components').notificationsDeploy, steps('notifications').teamsWebhookUrl, '')]",
+      "notificationEmails":             "[if(steps('components').notificationsDeploy, steps('notifications').notificationEmails, '')]",
+      "otelSecondaryEndpoint":          "",
+      "jumpvmAdminPassword":            "[if(steps('components').jumpvmDeploy, steps('compute').jumpvmAdminPassword, '')]",
+      "buildvmSshPublicKey":            "[if(steps('components').buildvmDeploy, steps('compute').buildvmSshPublicKey, '')]"
+    }
+  }
+}
