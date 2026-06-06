@@ -79,7 +79,7 @@
             "name": "blueprintPicker",
             "type": "Microsoft.Common.DropDown",
             "label": "Blueprint",
-            "defaultValue": "smoke (~$50/mo — foundation + Foundry + Search Basic)",
+            "defaultValue": "smoke",
             "toolTip": "Pick a starting profile. See the README cost-guidance table for monthly cost estimates per blueprint.",
             "constraints": {
               "required": true,
@@ -96,7 +96,7 @@
             "name": "networkMode",
             "type": "Microsoft.Common.DropDown",
             "label": "Network mode",
-            "defaultValue": "standalone (greenfield) — module creates the spoke VNet + DNS",
+            "defaultValue": "standalone",
             "toolTip": "standalone = the module owns the spoke VNet, 21 private DNS zones, NSGs, route tables. hub-connected = peer to an existing ALZ hub, reuse the hub's central PDNS zones.",
             "constraints": {
               "required": true,
@@ -258,7 +258,7 @@
             "name": "apimNetworkMode",
             "type": "Microsoft.Common.DropDown",
             "label": "APIM VNet mode",
-            "defaultValue": "internal (private, requires VNet line-of-sight)",
+            "defaultValue": "internal",
             "constraints": {
               "allowedValues": [
                 { "label": "internal (private, requires VNet line-of-sight)", "value": "internal" },
@@ -315,7 +315,7 @@
             "name": "standaloneSearchSku",
             "type": "Microsoft.Common.DropDown",
             "label": "AI Search SKU",
-            "defaultValue": "basic (cheap, single replica)",
+            "defaultValue": "basic",
             "constraints": {
               "allowedValues": [
                 { "label": "basic (cheap, single replica)",  "value": "basic" },
@@ -452,7 +452,7 @@
             "name": "safetyThreshold",
             "type": "Microsoft.Common.DropDown",
             "label": "Content Safety severity threshold",
-            "defaultValue": "4 — block medium+ severity (recommended)",
+            "defaultValue": 4,
             "constraints": {
               "allowedValues": [
                 { "label": "0 — block all (most strict)",                "value": 0 },
