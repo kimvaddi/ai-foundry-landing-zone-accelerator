@@ -22,6 +22,7 @@ Both **Bicep** and **Terraform** are first-class — they ship the same architec
 - [When should I use this?](#when-should-i-use-this)
 - [Architecture at a glance](#architecture-at-a-glance)
 - [What gets deployed](#what-gets-deployed)
+- [Identity & RBAC](#identity--rbac)
 - [Quick start (5 commands)](#quick-start-5-commands)
 - [Blueprints](#blueprints)
 - [Toggles — what to turn on/off](#toggles--what-to-turn-onoff)
@@ -196,11 +197,96 @@ See [docs/architecture.md](docs/architecture.md) for detail (subnet map, hub-con
 
 - `policy/` — 12-control Azure Policy initiative (model allowlist, private-only, MI-only, CMK, Defender DINE, tag enforcement)
 - `apim-policies/` — AI Gateway XML policies (`token-limit`, `emit-token-metric`, `content-safety`, `prompt-shields`, `semantic-cache`)
-- `rbac/` — Foundry RBAC role map + PIM guidance + assignment templates
+- `rbac/` — Foundry RBAC role map + PIM guidance + assignment templates (see also the [**built-in post-deploy RBAC module**](#identity--rbac) wired into the wizard)
 - `content-safety/` — System prompt prefix + blocklists
 - `finops/` — Budgets module, chargeback KQL, auto-suspend Logic App
 - `governance/shadow-ai/` — Conditional Access + Defender for Cloud Apps + Purview DLP starter pack
 - `governance/agent-runtime/` — Policy-driven agent tool governance starter kit
+
+---
+
+## Identity & RBAC
+
+The template implements the official **Microsoft Foundry RBAC guidance** ([learn.microsoft.com](https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/rbac-azure-ai-foundry)) via an opt-in post-deploy module. Default is **OFF** so existing deployments are unaffected.
+
+### Baseline identity posture (always on)
+
+| Resource | Setting | Why |
+|---|---|---|
+| **Foundry account** | `disableLocalAuth: true`, SystemAssigned MI | Forces Entra ID for inference — no shared keys |
+| **Key Vault** | `enableRbacAuthorization: true` | RBAC mode; no legacy access policies |
+| **AI Search** | `disableLocalAuth` flag (set true under chokepoint), SystemAssigned MI | MI-based reads + writes |
+| **APIM** | `disableLocalAuth: <chokepoint>`, SystemAssigned MI | APIM MI calls Foundry without keys |
+| **Jump VM / Build VM** | SystemAssigned MI | Read KV secrets without local creds |
+
+### Post-deploy role assignments (opt-in via wizard's *Identity & RBAC* tab)
+
+When `enablePostDeployRbac=true`, the template wires up Microsoft's recommended enterprise mapping. Every individual assignment is gated by an `empty()` check on its target principal — supply only the object IDs you want assigned.
+
+| Recipient (object ID input) | Role | Role GUID | Scope |
+|---|---|---|---|
+| `foundryAdminGroupObjectId` (Entra group) | **Foundry Owner** | `c883944f-8b7b-4483-af10-35834be79c4a` | Foundry account |
+| `foundryLeadGroupObjectId` (Entra group) | **Foundry Project Manager** | `eadc314b-1a2d-4efa-be10-5d325db5065e` | Foundry account |
+| `foundryDeveloperGroupObjectId` (Entra group) | **Foundry User** *(least-privilege)* | `53ca6127-db72-4b80-b1b0-d745d6d5456d` | Foundry account |
+| `platformReaderGroupObjectId` (Entra group) | **Reader** | `acdd72a7-3385-48ef-bd42-f606fba81ae7` | Foundry account + platform RG |
+| `deploymentSpnObjectId` (SPN) | **Contributor** | `b24988ac-6180-42a0-ab88-20f7382dd24c` | Platform RG |
+| Foundry account MI (auto-wired) | **Search Index Data Reader** *(read-only)* | `1407120a-92aa-4202-b7e9-c0e197c71c8f` | AI Search service (when deployed) |
+| **Each Foundry project MI** (auto-wired, one per project) | **Foundry User** | `53ca6127-db72-4b80-b1b0-d745d6d5456d` | Foundry account |
+| **Each Foundry project MI** (auto-wired, one per project) | **Search Index Data Reader** *(read-only)* | `1407120a-92aa-4202-b7e9-c0e197c71c8f` | AI Search service (when deployed) |
+| Jump VM MI (auto-wired) | **Key Vault Secrets User** | `4633458b-17de-408a-b874-0445c86b69e6` | Key Vault (when VM deployed) |
+| Build agent VM MI (auto-wired) | **Key Vault Secrets User** | `4633458b-17de-408a-b874-0445c86b69e6` | Key Vault (when VM deployed) |
+
+Role definitions use **GUIDs, not display names** — the 2025 Foundry-role rename (`Azure AI User` → `Foundry User`, etc.) keeps GUIDs stable, so IaC stays rename-safe.
+
+> ⚠️ **The principal that *runs* the deployment must hold `User Access Administrator` (or `Role Based Access Control Administrator`) at the subscription scope when `enablePostDeployRbac=true`.** Plain `Contributor` cannot create role assignments and the deploy will fail with `AuthorizationFailed`. The `deploymentSpnObjectId` Contributor grant emitted by this module is for *future* workload deploys against the platform RG, not for bootstrapping itself.
+
+> ℹ️ **About the BYOR / project identities.** The Foundry account MI and **each project MI** both receive `Search Index Data Reader` — Microsoft's RBAC doc is explicit that BYOR Search connections execute under the *project* MI, not the account MI. We also grant each project MI `Foundry User` on the parent account, which is required for agent runs and BYOR data operations from inside a project. These project-MI grants are wired automatically from `foundry.outputs.projectPrincipalIds` — no input needed.
+
+> 🔒 **`Search Index Data Reader` is read-only.** For workflows that *create or update* Search indexes from a Foundry project (e.g. data-ingestion agents), manually add `Search Index Data Contributor` (`8ebe5a00-799e-43f5-93ac-243d3dce84a7`) or `Search Service Contributor` (`7ca78c08-252a-4471-8644-bb5ff32d4ba0`) on the project MI after deploy. We intentionally do not grant write by default.
+
+### Why this mapping?
+
+Direct from the [Microsoft Foundry RBAC doc](https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/rbac-azure-ai-foundry#sample-enterprise-rbac-mappings-for-projects)'s enterprise sample:
+
+| Persona | Role | Why |
+|---|---|---|
+| Platform managers | Foundry Account Owner / Foundry Owner | Create projects, deploy models, manage connections |
+| Team leads | Foundry Project Manager | Publish agents, create projects, assign Foundry User to devs |
+| Developers | Foundry User | Build agents, call models — **least privilege** for inference |
+| Auditors / SREs | Reader | Read-only visibility |
+| CI/CD | Contributor on RG | Deploy workloads without account-level write |
+
+Microsoft is explicit: **don't use any role that starts with `Cognitive Services *` or `Azure AI Developer` for human Foundry portal access** — those target direct AI Services or ML workspace scenarios, not Foundry projects.
+
+### Finding the object IDs
+
+```powershell
+# Entra group object ID
+az ad group show --group "ai-foundry-admins" --query id -o tsv
+
+# Service principal object ID (use enterprise app objectId, NOT appId)
+az ad sp show --id <appId-guid> --query id -o tsv
+```
+
+### Disabling / partial use
+
+- Leave `enablePostDeployRbac=false` → no role assignments emitted (default).
+- Set `enablePostDeployRbac=true` and provide **only** the IDs you want assigned (e.g. just the admin group). Empty IDs are silently skipped.
+- Re-running the deployment with different IDs is idempotent — role assignment names are deterministic `guid(scope, principal, role)`.
+
+### CLI override
+
+When deploying via Bicep instead of the Portal:
+
+```powershell
+az deployment sub create `
+  --location eastus2 `
+  --template-file infra/bicep/main.bicep `
+  --parameters infra/bicep/parameters/quickstart-hub-connected.bicepparam `
+  --parameters enablePostDeployRbac=true `
+              foundryAdminGroupObjectId="11111111-2222-3333-4444-555555555555" `
+              foundryDeveloperGroupObjectId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+```
 
 ---
 

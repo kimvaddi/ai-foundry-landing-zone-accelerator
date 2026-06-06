@@ -569,6 +569,102 @@
           }
         ],
         "visible": "[steps('components').notificationsDeploy]"
+      },
+      {
+        "name": "rbac",
+        "label": "Identity & RBAC",
+        "elements": [
+          {
+            "name": "rbacIntro",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Implements Microsoft's recommended Foundry RBAC model (learn.microsoft.com/azure/ai-foundry/concepts/rbac-azure-ai-foundry). Default = OFF. Toggle on to assign Foundry Owner / Project Manager / User to Entra groups, plus Foundry MI → Search Index Data Reader and VM MIs → Key Vault Secrets User. Every field is optional — leave blank to skip an individual assignment. All assignments use role GUIDs (rename-safe)."
+            }
+          },
+          {
+            "name": "enablePostDeployRbac",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable post-deploy RBAC assignments",
+            "defaultValue": false,
+            "toolTip": "Master switch. When OFF, no role assignments are emitted regardless of the object IDs below."
+          },
+          {
+            "name": "rbacFindIdsHint",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[steps('rbac').enablePostDeployRbac]",
+            "options": {
+              "icon": "Info",
+              "text": "Find object IDs in Entra: Groups → <group> → Object ID, or SPN → Enterprise Applications → <app> → Object ID. CLI: az ad group show --group <name> --query id -o tsv  •  az ad sp show --id <appId> --query id -o tsv"
+            }
+          },
+          {
+            "name": "foundryAdminGroupObjectId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Foundry Owner group (object ID)",
+            "defaultValue": "",
+            "toolTip": "Entra group that gets Foundry Owner on the Foundry account. Highly privileged — full project + model + RBAC management. Example: 11111111-2222-3333-4444-555555555555",
+            "visible": "[steps('rbac').enablePostDeployRbac]",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Leave blank or paste a valid Entra group object ID (GUID)."
+            }
+          },
+          {
+            "name": "foundryLeadGroupObjectId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Foundry Project Manager group (object ID)",
+            "defaultValue": "",
+            "toolTip": "Entra group that gets Foundry Project Manager — team leads who publish agents, create projects, and assign Foundry User to others.",
+            "visible": "[steps('rbac').enablePostDeployRbac]",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Leave blank or paste a valid Entra group object ID (GUID)."
+            }
+          },
+          {
+            "name": "foundryDeveloperGroupObjectId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Foundry User group (object ID)",
+            "defaultValue": "",
+            "toolTip": "Entra group that gets Foundry User — developers who build agents and call models. Least-privilege Foundry role.",
+            "visible": "[steps('rbac').enablePostDeployRbac]",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Leave blank or paste a valid Entra group object ID (GUID)."
+            }
+          },
+          {
+            "name": "platformReaderGroupObjectId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Reader group (object ID)",
+            "defaultValue": "",
+            "toolTip": "Entra group that gets Reader on the Foundry account AND on the platform resource group — auditors, SREs, anyone who needs read-only visibility.",
+            "visible": "[steps('rbac').enablePostDeployRbac]",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Leave blank or paste a valid Entra group object ID (GUID)."
+            }
+          },
+          {
+            "name": "deploymentSpnObjectId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "CI/CD deployment SPN (object ID)",
+            "defaultValue": "",
+            "toolTip": "Service principal object ID that gets Contributor on the platform resource group — your GitHub Actions or Azure DevOps deployer.",
+            "visible": "[steps('rbac').enablePostDeployRbac]",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Leave blank or paste a valid SPN object ID (GUID)."
+            }
+          }
+        ]
       }
     ],
     "outputs": {
@@ -638,7 +734,13 @@
       "notificationEmails":             "[if(steps('components').notificationsDeploy, steps('notifications').notificationEmails, '')]",
       "otelSecondaryEndpoint":          "",
       "jumpvmAdminPassword":            "[if(steps('components').jumpvmDeploy, steps('compute').jumpvmAdminPassword, '')]",
-      "buildvmSshPublicKey":            "[if(steps('components').buildvmDeploy, steps('compute').buildvmSshPublicKey, '')]"
+      "buildvmSshPublicKey":            "[if(steps('components').buildvmDeploy, steps('compute').buildvmSshPublicKey, '')]",
+      "enablePostDeployRbac":           "[coalesce(steps('rbac').enablePostDeployRbac, false)]",
+      "foundryAdminGroupObjectId":      "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryAdminGroupObjectId, '')]",
+      "foundryLeadGroupObjectId":       "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryLeadGroupObjectId, '')]",
+      "foundryDeveloperGroupObjectId":  "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryDeveloperGroupObjectId, '')]",
+      "platformReaderGroupObjectId":    "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').platformReaderGroupObjectId, '')]",
+      "deploymentSpnObjectId":          "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').deploymentSpnObjectId, '')]"
     }
   }
 }

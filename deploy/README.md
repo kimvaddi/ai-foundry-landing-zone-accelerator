@@ -4,9 +4,9 @@ This folder holds the artifacts the **Deploy to Azure** button consumes.
 
 | File | Size | Purpose |
 |---|---|---|
-| [`azuredeploy.json`](azuredeploy.json) | ~22 KB | **Thin wrapper.** What the Portal deeplink fetches. Defines all 39 input parameters (so `createUiDefinition.json`'s outputs map cleanly), then issues a single sub-scope nested deployment that fetches `azuredeploy-full.json` server-side via ARM `templateLink`. |
-| [`azuredeploy-full.json`](azuredeploy-full.json) | ~1.7 MB | **The real template.** Compiled output of [`../infra/bicep/main.bicep`](../infra/bicep/main.bicep). Subscription-scope. ARM fetches this server-side after the wrapper deployment is submitted, so the Portal's deeplink size limit doesn't apply. |
-| [`createUiDefinition.json`](createUiDefinition.json) | ~32 KB | Custom Portal wizard with a blueprint picker, conditional hub / compute / APIM tabs, and per-blueprint defaults. |
+| [`azuredeploy.json`](azuredeploy.json) | ~24 KB | **Thin wrapper.** What the Portal deeplink fetches. Defines all 45 input parameters (so `createUiDefinition.json`'s outputs map cleanly), then issues a single sub-scope nested deployment that fetches `azuredeploy-full.json` server-side via ARM `templateLink`. |
+| [`azuredeploy-full.json`](azuredeploy-full.json) | ~1.8 MB | **The real template.** Compiled output of [`../infra/bicep/main.bicep`](../infra/bicep/main.bicep). Subscription-scope. ARM fetches this server-side after the wrapper deployment is submitted, so the Portal's deeplink size limit doesn't apply. |
+| [`createUiDefinition.json`](createUiDefinition.json) | ~40 KB | Custom Portal wizard with a blueprint picker, conditional hub / compute / APIM tabs, an Identity & RBAC tab, and per-blueprint defaults. |
 
 ### Why the wrapper?
 
@@ -52,8 +52,12 @@ The `infra/bicep/main.json` itself is gitignored as a transient build output; th
 Use the [Create UI Definition sandbox](https://portal.azure.com/?feature.customportal=false#blade/Microsoft_Azure_CreateUIDef/SandboxBlade):
 
 1. Open the sandbox, paste the contents of `createUiDefinition.json`, click **Preview**.
-2. Walk through every tab; confirm conditional visibility on the Hub, Compute, APIM, and Notifications steps.
-3. On the final step, expand **View outputs** to verify the `components` object and `existingPrivateDnsZones` map are well-formed.
+2. Walk through every tab; confirm conditional visibility on the Hub, Compute, APIM, Notifications, and Identity & RBAC steps.
+3. On the final step, expand **View outputs** to verify the `components` object, `existingPrivateDnsZones` map, and the 6 RBAC parameters (`enablePostDeployRbac`, `foundryAdminGroupObjectId`, `foundryLeadGroupObjectId`, `foundryDeveloperGroupObjectId`, `platformReaderGroupObjectId`, `deploymentSpnObjectId`) are well-formed.
+
+### Identity & RBAC tab — supplying object IDs
+
+The Identity & RBAC step is hidden behind a master toggle (`enablePostDeployRbac`) that defaults OFF. When toggled on, six text fields accept Entra object IDs (GUID format). Each is independently optional — leave blank to skip that specific role assignment. See the [**Identity & RBAC**](../README.md#identity--rbac) section of the root README for the full role mapping and the `az ad group show` / `az ad sp show` commands to discover IDs.
 
 ## Validating the wrapper (optional)
 

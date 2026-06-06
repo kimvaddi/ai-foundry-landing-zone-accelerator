@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "10063785612446664334"
+      "templateHash": "6692376566158132237"
     }
   },
   "parameters": {
@@ -362,6 +362,48 @@
       "defaultValue": 50000,
       "metadata": {
         "description": "Per-product TPM cap for the APIM `foundry-default` product. Templated into product-token-limit.xml."
+      }
+    },
+    "enablePostDeployRbac": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Master switch for the post-deploy RBAC module. When false (default), no role assignments are emitted regardless of the object IDs below."
+      }
+    },
+    "foundryAdminGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Foundry Owner on the Foundry account. Highly privileged. Leave empty to skip."
+      }
+    },
+    "foundryLeadGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Foundry Project Manager on the Foundry account (team leads who publish agents and create projects). Leave empty to skip."
+      }
+    },
+    "foundryDeveloperGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Foundry User on the Foundry account (developers who build agents and call models). Leave empty to skip."
+      }
+    },
+    "platformReaderGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Reader on the Foundry account AND on the platform RG (auditors / SREs). Leave empty to skip."
+      }
+    },
+    "deploymentSpnObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Service principal object ID -> Contributor on the platform RG (CI/CD pipelines that deploy workloads). Leave empty to skip."
       }
     }
   },
@@ -31248,6 +31290,404 @@
         "law",
         "rgPlatform",
         "spokeVnet"
+      ]
+    },
+    "postRbacFoundry": {
+      "condition": "[parameters('enablePostDeployRbac')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('post-rbac-foundry-{0}', parameters('env'))]",
+      "resourceGroup": "[variables('rgFoundryName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "foundryAccountName": {
+            "value": "[format('aif-{0}', variables('nameSuffix'))]"
+          },
+          "searchServiceName": "[if(parameters('components').standaloneSearch.deploy, createObject('value', format('srch-{0}', variables('nameSuffix'))), createObject('value', ''))]",
+          "foundryAdminGroupObjectId": {
+            "value": "[parameters('foundryAdminGroupObjectId')]"
+          },
+          "foundryLeadGroupObjectId": {
+            "value": "[parameters('foundryLeadGroupObjectId')]"
+          },
+          "foundryDeveloperGroupObjectId": {
+            "value": "[parameters('foundryDeveloperGroupObjectId')]"
+          },
+          "foundryReaderGroupObjectId": {
+            "value": "[parameters('platformReaderGroupObjectId')]"
+          },
+          "foundryAccountPrincipalId": {
+            "value": "[reference('foundry').outputs.principalId.value]"
+          },
+          "projectPrincipalIds": {
+            "value": "[reference('foundry').outputs.projectPrincipalIds.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.43.8.12551",
+              "templateHash": "3088813972248461970"
+            }
+          },
+          "parameters": {
+            "foundryAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Foundry Cognitive Services account name (in this RG)."
+              }
+            },
+            "searchServiceName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional: AI Search service name (in this RG). When empty, Search role grant is skipped."
+              }
+            },
+            "foundryAdminGroupObjectId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Entra group object ID that receives Foundry Owner on the Foundry account. Empty to skip."
+              }
+            },
+            "foundryLeadGroupObjectId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Entra group object ID that receives Foundry Project Manager on the Foundry account. Empty to skip."
+              }
+            },
+            "foundryDeveloperGroupObjectId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Entra group object ID that receives Foundry User on the Foundry account. Empty to skip."
+              }
+            },
+            "foundryReaderGroupObjectId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Entra group object ID that receives Reader on the Foundry account. Empty to skip."
+              }
+            },
+            "foundryAccountPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Foundry account system-assigned MI principal ID. Empty to skip Search role grant."
+              }
+            },
+            "projectPrincipalIds": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "Array of Foundry project system-assigned MI principal IDs. Each gets Foundry User on the account and (when Search is present) Search Index Data Reader. Microsoft guidance: project MIs are the runtime identity for BYOR connections, so they need these grants — not the account MI."
+              }
+            }
+          },
+          "variables": {
+            "roleFoundryOwner": "c883944f-8b7b-4483-af10-35834be79c4a",
+            "roleFoundryProjectManager": "eadc314b-1a2d-4efa-be10-5d325db5065e",
+            "roleFoundryUser": "53ca6127-db72-4b80-b1b0-d745d6d5456d",
+            "roleReader": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+            "roleSearchIndexDataReader": "1407120a-92aa-4202-b7e9-c0e197c71c8f"
+          },
+          "resources": [
+            {
+              "condition": "[not(empty(parameters('foundryAdminGroupObjectId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('foundryAdminGroupObjectId'), variables('roleFoundryOwner'))]",
+              "properties": {
+                "principalId": "[parameters('foundryAdminGroupObjectId')]",
+                "principalType": "Group",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleFoundryOwner'))]",
+                "description": "Foundry Owner for admin group (klz-accelerator post-deploy RBAC)."
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('foundryLeadGroupObjectId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('foundryLeadGroupObjectId'), variables('roleFoundryProjectManager'))]",
+              "properties": {
+                "principalId": "[parameters('foundryLeadGroupObjectId')]",
+                "principalType": "Group",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleFoundryProjectManager'))]",
+                "description": "Foundry Project Manager for team-lead group (klz-accelerator post-deploy RBAC)."
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('foundryDeveloperGroupObjectId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('foundryDeveloperGroupObjectId'), variables('roleFoundryUser'))]",
+              "properties": {
+                "principalId": "[parameters('foundryDeveloperGroupObjectId')]",
+                "principalType": "Group",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleFoundryUser'))]",
+                "description": "Foundry User for developer group (klz-accelerator post-deploy RBAC)."
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('foundryReaderGroupObjectId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('foundryReaderGroupObjectId'), variables('roleReader'))]",
+              "properties": {
+                "principalId": "[parameters('foundryReaderGroupObjectId')]",
+                "principalType": "Group",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleReader'))]",
+                "description": "Reader for auditor/SRE group (klz-accelerator post-deploy RBAC)."
+              }
+            },
+            {
+              "condition": "[and(not(empty(parameters('searchServiceName'))), not(empty(parameters('foundryAccountPrincipalId'))))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), parameters('foundryAccountPrincipalId'), variables('roleSearchIndexDataReader'))]",
+              "properties": {
+                "principalId": "[parameters('foundryAccountPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataReader'))]",
+                "description": "Foundry account MI -> Search Index Data Reader (klz-accelerator post-deploy RBAC)."
+              }
+            },
+            {
+              "copy": {
+                "name": "raProjectFoundryUser",
+                "count": "[length(parameters('projectPrincipalIds'))]"
+              },
+              "condition": "[not(empty(parameters('projectPrincipalIds')[copyIndex()]))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('projectPrincipalIds')[copyIndex()], variables('roleFoundryUser'), 'project')]",
+              "properties": {
+                "principalId": "[parameters('projectPrincipalIds')[copyIndex()]]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleFoundryUser'))]",
+                "description": "Project MI -> Foundry User on parent account (klz-accelerator post-deploy RBAC)."
+              }
+            },
+            {
+              "copy": {
+                "name": "raProjectToSearch",
+                "count": "[length(parameters('projectPrincipalIds'))]"
+              },
+              "condition": "[and(not(empty(parameters('searchServiceName'))), not(empty(parameters('projectPrincipalIds')[copyIndex()])))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), parameters('projectPrincipalIds')[copyIndex()], variables('roleSearchIndexDataReader'), 'project')]",
+              "properties": {
+                "principalId": "[parameters('projectPrincipalIds')[copyIndex()]]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataReader'))]",
+                "description": "Project MI -> Search Index Data Reader (klz-accelerator post-deploy RBAC)."
+              }
+            }
+          ],
+          "outputs": {
+            "assignedFoundryOwner": {
+              "type": "bool",
+              "value": "[not(empty(parameters('foundryAdminGroupObjectId')))]"
+            },
+            "assignedFoundryProjectManager": {
+              "type": "bool",
+              "value": "[not(empty(parameters('foundryLeadGroupObjectId')))]"
+            },
+            "assignedFoundryUser": {
+              "type": "bool",
+              "value": "[not(empty(parameters('foundryDeveloperGroupObjectId')))]"
+            },
+            "assignedFoundryReader": {
+              "type": "bool",
+              "value": "[not(empty(parameters('foundryReaderGroupObjectId')))]"
+            },
+            "assignedFoundryToSearch": {
+              "type": "bool",
+              "value": "[and(not(empty(parameters('searchServiceName'))), not(empty(parameters('foundryAccountPrincipalId'))))]"
+            },
+            "assignedProjectMIs": {
+              "type": "int",
+              "value": "[length(parameters('projectPrincipalIds'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "aiSearch",
+        "foundry",
+        "rgFoundry"
+      ]
+    },
+    "postRbacPlatform": {
+      "condition": "[parameters('enablePostDeployRbac')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('post-rbac-platform-{0}', parameters('env'))]",
+      "resourceGroup": "[variables('rgPlatformName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[format('kv-{0}', variables('nameSuffix'))]"
+          },
+          "platformReaderGroupObjectId": {
+            "value": "[parameters('platformReaderGroupObjectId')]"
+          },
+          "deploymentSpnObjectId": {
+            "value": "[parameters('deploymentSpnObjectId')]"
+          },
+          "jumpVmPrincipalId": "[if(parameters('components').jumpvm.deploy, createObject('value', reference('jumpbox').outputs.principalId.value), createObject('value', ''))]",
+          "buildVmPrincipalId": "[if(parameters('components').buildvm.deploy, createObject('value', reference('buildAgent').outputs.principalId.value), createObject('value', ''))]"
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.43.8.12551",
+              "templateHash": "7687222394649147952"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Key Vault name (in this RG). Empty to skip KV role grants."
+              }
+            },
+            "platformReaderGroupObjectId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Entra group object ID that receives Reader on the platform RG. Empty to skip."
+              }
+            },
+            "deploymentSpnObjectId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Service principal object ID that receives Contributor on the platform RG. Empty to skip."
+              }
+            },
+            "jumpVmPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Jump VM system-assigned MI principal ID. Empty to skip KV Secrets User grant."
+              }
+            },
+            "buildVmPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Build agent VM system-assigned MI principal ID. Empty to skip KV Secrets User grant."
+              }
+            }
+          },
+          "variables": {
+            "roleReader": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+            "roleContributor": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+            "roleKeyVaultSecretsUser": "4633458b-17de-408a-b874-0445c86b69e6"
+          },
+          "resources": [
+            {
+              "condition": "[not(empty(parameters('platformReaderGroupObjectId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('platformReaderGroupObjectId'), variables('roleReader'))]",
+              "properties": {
+                "principalId": "[parameters('platformReaderGroupObjectId')]",
+                "principalType": "Group",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleReader'))]",
+                "description": "Reader on platform RG (klz-accelerator post-deploy RBAC)."
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('deploymentSpnObjectId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('deploymentSpnObjectId'), variables('roleContributor'))]",
+              "properties": {
+                "principalId": "[parameters('deploymentSpnObjectId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleContributor'))]",
+                "description": "Contributor on platform RG for CI/CD SPN (klz-accelerator post-deploy RBAC)."
+              }
+            },
+            {
+              "condition": "[and(not(empty(parameters('keyVaultName'))), not(empty(parameters('jumpVmPrincipalId'))))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('jumpVmPrincipalId'), variables('roleKeyVaultSecretsUser'))]",
+              "properties": {
+                "principalId": "[parameters('jumpVmPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleKeyVaultSecretsUser'))]",
+                "description": "Jump VM MI -> Key Vault Secrets User (klz-accelerator post-deploy RBAC)."
+              }
+            },
+            {
+              "condition": "[and(not(empty(parameters('keyVaultName'))), not(empty(parameters('buildVmPrincipalId'))))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('buildVmPrincipalId'), variables('roleKeyVaultSecretsUser'))]",
+              "properties": {
+                "principalId": "[parameters('buildVmPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleKeyVaultSecretsUser'))]",
+                "description": "Build VM MI -> Key Vault Secrets User (klz-accelerator post-deploy RBAC)."
+              }
+            }
+          ],
+          "outputs": {
+            "assignedReader": {
+              "type": "bool",
+              "value": "[not(empty(parameters('platformReaderGroupObjectId')))]"
+            },
+            "assignedContributor": {
+              "type": "bool",
+              "value": "[not(empty(parameters('deploymentSpnObjectId')))]"
+            },
+            "assignedJumpKv": {
+              "type": "bool",
+              "value": "[and(not(empty(parameters('keyVaultName'))), not(empty(parameters('jumpVmPrincipalId'))))]"
+            },
+            "assignedBuildKv": {
+              "type": "bool",
+              "value": "[and(not(empty(parameters('keyVaultName'))), not(empty(parameters('buildVmPrincipalId'))))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "buildAgent",
+        "jumpbox",
+        "rgPlatform"
       ]
     }
   },

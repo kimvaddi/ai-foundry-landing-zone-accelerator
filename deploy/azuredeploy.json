@@ -362,6 +362,48 @@
       "metadata": {
         "description": "Per-product TPM cap for the APIM `foundry-default` product. Templated into product-token-limit.xml."
       }
+    },
+    "enablePostDeployRbac": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Master switch for post-deploy RBAC. When false, no role assignments are emitted regardless of the object IDs below."
+      }
+    },
+    "foundryAdminGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Foundry Owner on the Foundry account. Leave empty to skip."
+      }
+    },
+    "foundryLeadGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Foundry Project Manager on the Foundry account. Leave empty to skip."
+      }
+    },
+    "foundryDeveloperGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Foundry User on the Foundry account. Leave empty to skip."
+      }
+    },
+    "platformReaderGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Reader on the Foundry account and platform RG. Leave empty to skip."
+      }
+    },
+    "deploymentSpnObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Service principal object ID -> Contributor on the platform RG (CI/CD). Leave empty to skip."
+      }
     }
   },
   "resources": [
@@ -416,6 +458,9 @@
           "deployNotifications": {
             "value": "[parameters('deployNotifications')]"
           },
+          "deploymentSpnObjectId": {
+            "value": "[parameters('deploymentSpnObjectId')]"
+          },
           "embeddingsDeploymentName": {
             "value": "[parameters('embeddingsDeploymentName')]"
           },
@@ -434,6 +479,9 @@
           "enablePromptShields": {
             "value": "[parameters('enablePromptShields')]"
           },
+          "enablePostDeployRbac": {
+            "value": "[parameters('enablePostDeployRbac')]"
+          },
           "enableSemanticCache": {
             "value": "[parameters('enableSemanticCache')]"
           },
@@ -446,8 +494,17 @@
           "existingPrivateDnsZones": {
             "value": "[parameters('existingPrivateDnsZones')]"
           },
+          "foundryAdminGroupObjectId": {
+            "value": "[parameters('foundryAdminGroupObjectId')]"
+          },
           "foundryByorConnections": {
             "value": "[parameters('foundryByorConnections')]"
+          },
+          "foundryDeveloperGroupObjectId": {
+            "value": "[parameters('foundryDeveloperGroupObjectId')]"
+          },
+          "foundryLeadGroupObjectId": {
+            "value": "[parameters('foundryLeadGroupObjectId')]"
           },
           "foundryProjects": {
             "value": "[parameters('foundryProjects')]"
@@ -475,6 +532,9 @@
           },
           "otelSecondaryEndpoint": {
             "value": "[parameters('otelSecondaryEndpoint')]"
+          },
+          "platformReaderGroupObjectId": {
+            "value": "[parameters('platformReaderGroupObjectId')]"
           },
           "safetyThreshold": {
             "value": "[parameters('safetyThreshold')]"

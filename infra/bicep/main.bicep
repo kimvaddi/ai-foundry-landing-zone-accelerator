@@ -194,6 +194,32 @@ param embeddingsDeploymentName string = 'text-embedding-3-large'
 @description('Per-product TPM cap for the APIM `foundry-default` product. Templated into product-token-limit.xml.')
 param apimProductTokensPerMinute int = 50000
 
+// ----------------------- Post-deploy RBAC (Microsoft Foundry guidance) -----
+// Wires up the recommended role-assignment model from
+//   https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/rbac-azure-ai-foundry
+// Default OFF — every existing deployment is unaffected unless the operator
+// opts in by setting enablePostDeployRbac=true AND providing object IDs.
+// Each role assignment is gated by `empty()` on its principal, so partial
+// configurations are valid (e.g. wire only the admin group).
+
+@description('Master switch for the post-deploy RBAC module. When false (default), no role assignments are emitted regardless of the object IDs below.')
+param enablePostDeployRbac bool = false
+
+@description('Entra group object ID -> Foundry Owner on the Foundry account. Highly privileged. Leave empty to skip.')
+param foundryAdminGroupObjectId string = ''
+
+@description('Entra group object ID -> Foundry Project Manager on the Foundry account (team leads who publish agents and create projects). Leave empty to skip.')
+param foundryLeadGroupObjectId string = ''
+
+@description('Entra group object ID -> Foundry User on the Foundry account (developers who build agents and call models). Leave empty to skip.')
+param foundryDeveloperGroupObjectId string = ''
+
+@description('Entra group object ID -> Reader on the Foundry account AND on the platform RG (auditors / SREs). Leave empty to skip.')
+param platformReaderGroupObjectId string = ''
+
+@description('Service principal object ID -> Contributor on the platform RG (CI/CD pipelines that deploy workloads). Leave empty to skip.')
+param deploymentSpnObjectId string = ''
+
 var apimPublisherEmail = '${apimPublisherLocalPart}@${apimPublisherDomain}'
 
 // ----------------------- Naming ---------------------------------------
@@ -728,6 +754,41 @@ module appGateway 'modules/compute/app-gateway.bicep' = if (components.appGatewa
     skuName: (components.appGateway.?wafEnabled ?? true) ? 'WAF_v2' : 'Standard_v2'
     workspaceResourceId: law.outputs.workspaceResourceId
     tags: tags
+  }
+}
+
+// ----------------------- Post-deploy RBAC (opt-in) --------------------
+// Implements Microsoft Foundry RBAC guidance. Each sub-module gates its
+// individual role assignments with empty() checks on principal IDs, so a
+// partial configuration (e.g. only admin group provided) is valid.
+
+module postRbacFoundry 'modules/security/rbac-foundry-scope.bicep' = if (enablePostDeployRbac) {
+  scope: rgFoundry
+  name: 'post-rbac-foundry-${env}'
+  params: {
+    foundryAccountName: 'aif-${nameSuffix}'
+    searchServiceName: components.standaloneSearch.deploy ? 'srch-${nameSuffix}' : ''
+    foundryAdminGroupObjectId: foundryAdminGroupObjectId
+    foundryLeadGroupObjectId: foundryLeadGroupObjectId
+    foundryDeveloperGroupObjectId: foundryDeveloperGroupObjectId
+    foundryReaderGroupObjectId: platformReaderGroupObjectId
+    foundryAccountPrincipalId: foundry.outputs.principalId
+    projectPrincipalIds: foundry.outputs.projectPrincipalIds
+  }
+  dependsOn: [
+    aiSearch
+  ]
+}
+
+module postRbacPlatform 'modules/security/rbac-platform-scope.bicep' = if (enablePostDeployRbac) {
+  scope: rgPlatform
+  name: 'post-rbac-platform-${env}'
+  params: {
+    keyVaultName: 'kv-${nameSuffix}'
+    platformReaderGroupObjectId: platformReaderGroupObjectId
+    deploymentSpnObjectId: deploymentSpnObjectId
+    jumpVmPrincipalId: components.jumpvm.deploy ? jumpbox!.outputs.principalId : ''
+    buildVmPrincipalId: components.buildvm.deploy ? buildAgent!.outputs.principalId : ''
   }
 }
 
