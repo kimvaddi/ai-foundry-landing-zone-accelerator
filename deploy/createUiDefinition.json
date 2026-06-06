@@ -373,7 +373,7 @@
             },
             "toolTip": "Local admin password for the Windows jump VM. Min 12 chars, 3 of 4 categories (upper, lower, digit, symbol).",
             "constraints": {
-              "required": true,
+              "required": "[steps('components').jumpvmDeploy]",
               "regex": "^(?=.{12,})((?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])|(?=.*[A-Z])(?=.*[a-z])(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9])).*$",
               "validationMessage": "Min 12 chars, must include 3 of: upper, lower, digit, symbol."
             },
@@ -387,7 +387,7 @@
             "defaultValue": "",
             "toolTip": "OpenSSH single-line format. Generate with: ssh-keygen -t ed25519 -C build-vm",
             "constraints": {
-              "required": true,
+              "required": "[steps('components').buildvmDeploy]",
               "regex": "^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/=]+( .+)?$",
               "validationMessage": "Must be a valid OpenSSH public key line (ssh-rsa / ssh-ed25519 / ecdsa-sha2-*)."
             },
