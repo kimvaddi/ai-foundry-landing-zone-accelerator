@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "klz-diagnostic-min-wrapper",
+      "purpose": "Minimal sub-scope template used ONLY to isolate Portal deeplink errors. Creates a single empty resource group."
+    }
+  },
+  "parameters": {
+    "workload": {
+      "type": "string",
+      "defaultValue": "klztest",
+      "metadata": { "description": "Workload short name." }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": { "description": "Resource group location." }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2022-09-01",
+      "name": "[format('rg-{0}-deploybutton-test', parameters('workload'))]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "purpose": "deploy-button-diagnostic",
+        "workload": "[parameters('workload')]"
+      }
+    }
+  ],
+  "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[format('rg-{0}-deploybutton-test', parameters('workload'))]"
+    }
+  }
+}
