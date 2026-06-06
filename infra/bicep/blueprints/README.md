@@ -75,19 +75,3 @@ az deployment sub create `
   --parameters jumpvmAdminPassword=$env:KLZ_JUMPVM_PWD `
   --parameters buildvmSshPublicKey=$env:KLZ_BUILDVM_SSHKEY
 ```
-
-## QA status (last validated)
-
-All 5 Bicep blueprints `az bicep build-params` clean.
-All 5 Terraform blueprints + `full.tfvars` + `stage-b-toggles.tfvars` + `enterprise-hub-connected.sample.tfvars` reach `terraform plan` with **0 errors**:
-
-| File | Resources to add |
-|---|---|
-| `parameters/full.tfvars` | 75 |
-| `parameters/stage-b-toggles.tfvars` | 105 |
-| `parameters/enterprise-hub-connected.sample.tfvars` | 82 |
-| `blueprints/smoke/smoke.tfvars` | 71 |
-| `blueprints/poc-standalone-spoke/poc-standalone-spoke.tfvars` | 71 |
-| `blueprints/poc-hub-connected/poc-hub-connected.tfvars` | 55 |
-| `blueprints/prod-standalone-with-fw/prod-standalone-with-fw.tfvars` | 110 |
-| `blueprints/prod-hub-connected/prod-hub-connected.tfvars` | 85 |

@@ -1,17 +1,17 @@
-# Azure scope targets — Phase B (D2)
+# Azure scope targets
 
 > **Status:** target names only. Neither the MG nor the subscription exist yet.
-> the platform/billing admin creates them; we then drop the real IDs
-> back into the table below and re-run the assignment script.
+> The platform/billing admin creates them; then drop the real IDs back into
+> the table below and re-run the assignment script.
 
-## Decision (D2, 2026-05-25)
+## Targets
 
 | Item | Target | Status |
 |---|---|---|
 | New MG | `ai-landing-zone` (display: "AI Landing Zone") | **Not yet created** |
-| Parent MG | An existing intermediate Platform MG | **ID needed from the customer** |
+| Parent MG | An existing intermediate Platform MG | **ID needed from the platform admin** |
 | New subscription | `sub-ai-platform-dev` | **Not yet provisioned** |
-| Phase B rollout mode | Audit-first | **Confirmed** |
+| Rollout mode | Audit-first | **Default** |
 
 ## Fill these in once the resources exist
 
@@ -23,12 +23,12 @@ AI_LANDING_ZONE_MG_ARM_ID    = /providers/Microsoft.Management/managementGroups/
 NEW_SUB_NAME                 = sub-ai-platform-dev
 NEW_SUB_GUID                 = <fill once provisioned>
 
-DEV_LAW_RESOURCE_ID          = /subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-klzfin-platform-dev/providers/Microsoft.OperationalInsights/workspaces/log-klzfin-dev-c6ej
+DEV_LAW_RESOURCE_ID          = /subscriptions/<sub-guid>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<workspace>
 ```
 
 ## Sequence
 
-1. **the customer confirms the parent Platform MG ID** → fill `PARENT_PLATFORM_MG_ID`.
+1. **Confirm the parent Platform MG ID** → fill `PARENT_PLATFORM_MG_ID`.
 2. **Create the new MG** with [../policy/mg/main.bicep](../policy/mg/main.bicep):
    ```powershell
    az deployment tenant create `
@@ -38,13 +38,13 @@ DEV_LAW_RESOURCE_ID          = /subscriptions/22222222-2222-2222-2222-2222222222
      --parameters parentManagementGroupId=<PARENT_PLATFORM_MG_ID>
    ```
 3. **Request the new subscription** through EA/MCA, ask for it to be moved
-   under the `ai-landing-zone` MG. While waiting, use the current dev sub
-   (`58b49b94-…`) as a stand-in.
+   under the `ai-landing-zone` MG. While waiting, an existing dev sub can act
+   as a stand-in.
 4. **DryRun the assignment** (no writes):
    ```powershell
    ./policy/assign-mg-initiative.ps1 `
      -ManagementGroupId       ai-landing-zone `
-     -SubscriptionId          22222222-2222-2222-2222-222222222222 `
+     -SubscriptionId          <sub-guid> `
      -LogAnalyticsWorkspaceId "$DEV_LAW_RESOURCE_ID"
    ```
 5. **Real assignment in Audit mode** (still no blocks, only signals):

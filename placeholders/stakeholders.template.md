@@ -1,13 +1,10 @@
-# Phase C stakeholders (D4)
+# Shadow-AI stakeholders
 
-> **Status:** staged with **made-up Contoso-style placeholders** so the artifacts
-> ship complete and reviewable. the customer replaces every `*@contoso.example` address
-> with a real owner/group before any policy or DLP rule is enabled.
+> **Status:** staged with **placeholder Contoso-style addresses** so the
+> artifacts ship complete and reviewable. Replace every `*@contoso.example`
+> address with a real owner/group before any policy or DLP rule is enabled.
 
-## Decision (D4, 2026-05-25)
-
-Use **option C — placeholder pattern** (matches D3 approach). Staging defaults
-shipped in the repo:
+## Stakeholder roles
 
 | Role | Staging email (placeholder) | Owns | Applied to |
 |---|---|---|---|
@@ -30,7 +27,7 @@ COMPLIANCE_APPROVER_GROUP_OBJECT_ID = <fill: Entra group object id of compliance
 
 ## Search-and-replace token map (run before any deploy)
 
-These tokens appear in the Phase C artifacts as `_REPLACE_WITH_*_` strings.
+These tokens appear in the shadow-AI artifacts as `_REPLACE_WITH_*_` strings.
 Use a single PowerShell pass to swap them:
 
 ```powershell
@@ -59,11 +56,11 @@ Get-ChildItem governance/shadow-ai -Recurse -Include *.json,*.md |
 
 ## Sign-off ladder
 
-Phase C artifacts NEVER deploy automatically. The ladder is:
+Shadow-AI artifacts NEVER deploy automatically. The ladder is:
 
-1. **Build (us)** — JSONs ship with placeholders, no behaviour.
-2. **the customer** runs the token-swap script above against a copy of the repo for his
-   tenant, fills in real owners.
+1. **Build** — JSONs ship with placeholders, no behaviour.
+2. **Token swap** — run the script above against a copy of the repo for the
+   target tenant; fill in real owners.
 3. **CA policy → IAM Owner approval** → import via `New-MgIdentityConditionalAccessPolicy`
    in `state: enabledForReportingButNotEnforced` (already the default).
 4. **MCAS connector → SecOps Owner approval** → enable via portal per
@@ -71,4 +68,4 @@ Phase C artifacts NEVER deploy automatically. The ladder is:
 5. **Purview DLP → Compliance Owner approval** → import via Purview Graph
    in `mode: TestWithoutNotifications` (already the default).
 6. **Flip from report-only / simulation to enforce** only after each owner
-   signs off independently. None of those flips are automated by us.
+   signs off independently. None of those flips are automated.

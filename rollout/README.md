@@ -1,28 +1,29 @@
-# KLZ Accelerator — customer rollout package
+# KLZ Accelerator — rollout package
 
-This folder is the **single deliverable the customer runs against the Foundry tenant** to
-get from "we have an installed accelerator" to "policy + notifications are
-governing our AI Landing Zone."
+This folder is the package an **operator** runs against the Foundry tenant to
+get from "accelerator installed" to "policy + notifications are governing the
+AI Landing Zone."
 
-It is also the package the test pilot uses to **prove every step works** in a
-dev tenant *before* anything reaches the customer.
+A parallel `test-harness/` runs the same scripts against a **synthetic** MG
+hierarchy in a sandbox tenant so changes can be verified before they touch a
+production tenant.
 
 ```
 rollout/
 ├── README.md                  <- you are here
-├── customer-runbook.md             <- the human-readable, copy-paste runbook for the customer
+├── customer-runbook.md             <- the human-readable, copy-paste runbook
 ├── config/
-│   ├── customer.psd1.template <- the customer copies + fills in (.psd1 is gitignored)
-│   └── pilot-test.psd1          <- the test pilot's pre-filled config for the test harness
-├── scripts/                   <- THE ROLLOUT — what the customer actually runs
+│   ├── customer.psd1.template <- copy + fill in (.psd1 is gitignored)
+│   └── pilot-test.psd1          <- pre-filled config for the test harness
+├── scripts/                   <- THE ROLLOUT — what runs in a production tenant
 │   ├── 00-preflight.ps1
 │   ├── 10-mg-hierarchy-ensure.ps1
 │   ├── 15-subscription-move-under-mg.ps1
 │   ├── 20-mg-policy-assign.ps1
 │   ├── 30-notifications-enable.ps1
-│   ├── 40-shadow-ai-ca.ps1    <- stub, Phase C lands in a follow-up iteration
+│   ├── 40-shadow-ai-ca.ps1    <- stub for the shadow-AI / Conditional Access track
 │   └── 99-rollback-all.ps1
-└── test-harness/              <- THE TEST PILOT — what the test pilot runs in the pilot tenant
+└── test-harness/              <- THE SANDBOX — what runs in a dev tenant
     ├── README.md
     ├── step-01-create-test-parent-mg.ps1
     ├── step-02-run-mg-rollout.ps1
@@ -35,10 +36,10 @@ rollout/
 
 ## The two-track model
 
-| Track | Audience | Input | Risk |
-|------|----------|-------|------|
-| `scripts/` | the customer | `config/customer.psd1` filled in once | Higher — touches real prod MG and Foundry RGs |
-| `test-harness/` | the test pilot | `config/pilot-test.psd1` (pre-filled, dev tenant only) | Low — synthetic MG, Audit only, self-cleaning |
+| Track | Input | Risk |
+|------|-------|------|
+| `scripts/` | `config/customer.psd1` filled in once | Higher — touches real prod MG and Foundry RGs |
+| `test-harness/` | `config/pilot-test.psd1` (pre-filled, dev tenant only) | Low — synthetic MG, Audit only, self-cleaning |
 
 The test harness **wraps** the rollout scripts. It does not duplicate them. Bug
 fixes happen once in `scripts/`; both tracks pick them up.
@@ -47,37 +48,38 @@ fixes happen once in `scripts/`; both tracks pick them up.
 
 ```
    ┌──────────────────────────────┐
-   │ 1. the test pilot writes/edits a script │
+   │ 1. edit / add a script       │
    │    in rollout/scripts/       │
    └──────────────┬───────────────┘
                   ↓
    ┌──────────────────────────────┐
-   │ 2. the test pilot runs the matching     │
-   │    step-NN in the pilot tenant │
+   │ 2. run the matching          │
+   │    step-NN in a sandbox      │
+   │    tenant                    │
    └──────────────┬───────────────┘
                   ↓
        PASS ────────── FAIL ──→ fix scripts/, re-run step-NN
         │
         ↓
    ┌──────────────────────────────┐
-   │ 3. the test pilot captures proof/ files │
-   │    to demonstrate to the customer     │
+   │ 3. capture proof/ files      │
+   │    for review                │
    └──────────────┬───────────────┘
                   ↓
    ┌──────────────────────────────┐
-   │ 4. the customer fills in customer.psd1│
-   │    and runs scripts/00..30   │
-   │    in the customer tenant    │
+   │ 4. fill in customer.psd1     │
+   │    and run scripts/00..30    │
+   │    in the production tenant  │
    └──────────────────────────────┘
 ```
 
-## Status (this iteration)
+## Status
 
-| Phase | scripts/ ready | test-harness/ ready | Notes |
-|-------|---------------|---------------------|-------|
-| B.1 wave 2 — MG policy | YES | YES | Default effect=Audit. Deny tested via temporary RG-scoped assignment in step 05. |
-| B.4 — Notifications | YES | YES | Logic App posts Adaptive Card to Teams via Workflows Incoming Webhook. Cost <$0.01 per test run. |
-| Phase C — Shadow-AI / CA | STUB | n/a | Designed but not built. See `scripts/40-shadow-ai-ca.ps1` for open questions. |
+| Track | scripts/ | test-harness/ | Notes |
+|-------|----------|---------------|-------|
+| MG policy | ready | ready | Default effect=Audit. Deny is exercised via a temporary RG-scoped assignment in step 05. |
+| Notifications | ready | ready | Logic App posts an Adaptive Card to Teams via Workflows Incoming Webhook. Logic App is Consumption-priced — cost only on trigger. |
+| Shadow-AI / Conditional Access | stub | n/a | Designed but not implemented. See `scripts/40-shadow-ai-ca.ps1` for the open questions. |
 
-See `customer-runbook.md` for the customer-facing sequence.
-See `test-harness/README.md` for the test pilot's sequence and proof capture.
+See `customer-runbook.md` for the production sequence.
+See `test-harness/README.md` for the sandbox sequence and proof capture.

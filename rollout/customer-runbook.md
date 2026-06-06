@@ -1,6 +1,6 @@
-# KLZ rollout runbook — the customer
+# KLZ rollout runbook
 
-This runbook takes the customer from "accelerator installed" to "AI Landing Zone MG
+This runbook takes the operator from "accelerator installed" to "AI Landing Zone MG
 governed by the KLZ baseline initiative with notifications wired into Teams."
 
 **Read end-to-end first. Do not skip steps.**
@@ -9,11 +9,11 @@ governed by the KLZ baseline initiative with notifications wired into Teams."
 
 ## Part 0 — Pre-reqs (one-time, ~10 min)
 
-the customer needs:
+You need:
 
 - **Tooling**: az CLI >= 2.60.0, PowerShell 7+, PowerShell module `Az` (>= 12.0).
 - **Permissions** (at minimum):
-  - `Owner` or `Management Group Contributor` at his existing Platform MG.
+  - `Owner` or `Management Group Contributor` on the existing Platform MG.
   - `Owner` or `Contributor` on the Azure subscription that hosts Foundry.
   - `Resource Policy Contributor` at the Platform MG (to publish defs + assign).
 - **Azure resources** that must already exist:
@@ -44,7 +44,7 @@ Required fields:
 | `ResourceGroupsToMove` | Names of the RGs that hold Foundry, AI Search, APIM (so they inherit the policy) |
 | `PolicyEffect` | Start at `Audit`. Switch to `Deny` only after a clean baseline. |
 
-Optional (Phase B.4 — fill when you're ready):
+Optional (fill when ready):
 
 | Field | Notes |
 |-------|-------|
@@ -172,9 +172,9 @@ re-parents the moved subscriptions back to your original parent MG.
 
 ## What's NOT in this rollout (yet)
 
-- Phase C — Conditional Access, DLP, Defender for Cloud Apps shadow-AI tagging.
-  Design lives in `scripts/40-shadow-ai-ca.ps1`; we'll iterate after we see
-  how the policy initiative behaves in your tenant.
+- Conditional Access, DLP, and Defender for Cloud Apps shadow-AI tagging.
+  Design lives in `scripts/40-shadow-ai-ca.ps1`; iterate after observing
+  policy initiative behaviour in the target tenant.
 
 ## When something goes wrong
 

@@ -153,7 +153,7 @@ Invoke-PSRule -InputPath infra/bicep/main.bicep -Module PSRule.Rules.Azure `
 |---|---|---|---|---|
 | 1 | `Azure.Log.Replication` | LAW | Geo-replication adds 2× cost; dev/poc blueprints opt out | Enable in `prod-*` blueprints only |
 | 2 | `Azure.Deployment.SecureParameter` | KV deployment | `name` parameter flagged as it ends in "Name" but is not a secret. Known FP on AVM key-vault | Pinned upstream; fix in AVM ≥ 0.14 |
-| 3 | `Azure.AI.PublicAccess` | Foundry account | `publicNetworkAccess = Enabled` for dev — PE is the data path | Set `Disabled` in prod blueprints once VPN/PE-only access tested |
+| 3 | `Azure.AI.PublicAccess` | Foundry account | `publicNetworkAccess = Enabled` for dev — PE is the data path | Set `Disabled` in prod blueprints after enabling PE-only access |
 | 4 | `Azure.AI.PrivateEndpoints` | Foundry account | PE IS created in `pe.bicep`, but the rule's resourceGraph lookup doesn't see cross-module PE. Known FP | Pinned; fix in PSRule.Rules.Azure ≥ 1.50 |
 | 5 | `Azure.Search.QuerySLA` | AI Search | Basic SKU = 1 replica = no query SLA. Dev cost choice | Use `sku: 'standard'` + 2 replicas for prod SLA |
 | 6 | `Azure.Search.IndexSLA` | AI Search | Basic SKU = 1 partition = no index SLA | Same — Standard SKU + 3 partitions for prod SLA |

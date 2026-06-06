@@ -1,15 +1,15 @@
-# Management Group scaffolding for Phase B
+# Management Group scaffolding
 
 This folder creates the **AI Landing Zone** MG so that the Foundry
 Enterprise Baseline initiative ([../initiative/foundry-enterprise-baseline.json](../initiative/foundry-enterprise-baseline.json))
-has a real scope to attach to. Per **D2 decision (2026-05-25)**:
+has a real scope to attach to.
 
 | Item | Value |
 |---|---|
 | New MG | `ai-landing-zone` (display: "AI Landing Zone") |
 | Parent | An existing intermediate Platform MG (caller supplies the ID) |
-| New subscription | `sub-ai-platform-dev` (not yet provisioned — see "Sub creation" below) |
-| Rollout mode | **Audit-first** (per cybersec sign-off) |
+| New subscription | `sub-ai-platform-dev` (not provisioned by this Bicep — see "Sub creation" below) |
+| Rollout mode | **Audit-first** |
 
 ## What this Bicep does
 
@@ -59,8 +59,7 @@ Most engineering identities do not hold these roles, so the standard pattern is:
    `sub-ai-platform-dev` and ask them to **move it under the `ai-landing-zone`
    MG** as soon as it lands (default landing is Tenant Root).
 2. While waiting, the dev environment continues to run in the current
-   subscription (`22222222-2222-2222-2222-222222222222`) — Phase A.5 / A.5b / B.1
-   are all live there. Policy assignment can run against the current sub as a
+   subscription — policy assignment can run against the current sub as a
    stand-in by moving the current sub under the new MG temporarily, or by
    skipping the MG path and assigning at sub scope.
 3. Once `sub-ai-platform-dev` exists, capture its GUID into
@@ -81,9 +80,8 @@ Hand the MG ID (it's lowercase, no spaces, e.g. `ai-landing-zone`) to:
   -Mode                     Audit
 ```
 
-`Mode = Audit` is the cybersec-signed-off starting point. Promotion to `Deny`
-is gated behind a second sign-off and the `-Confirm` prompt baked into the
-script.
+`Mode = Audit` is the recommended starting point. Promotion to `Deny`
+is gated behind the `-Confirm` prompt baked into the script.
 
 ## Rollback
 

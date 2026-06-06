@@ -82,8 +82,7 @@ A route table is only created when `enableForcedTunneling = true` AND `hubFirewa
 > `privatelink.openai.azure.com` for `/openai/*` endpoints and
 > `privatelink.cognitiveservices.azure.com` for the management/data plane.
 > Both A records are emitted in one shot by the dns-zone-group when both
-> zones are linked — verified live end-to-end during accelerator bring-up.
-> Linking only one breaks SDK behavior in non-obvious ways.
+> zones are linked. Linking only one breaks SDK behavior in non-obvious ways.
 
 > **Cross-region Search PE caveat:** Private Endpoints can't cross regions.
 > The default `searchLocation = westus2` (because `eastus2` Basic capacity

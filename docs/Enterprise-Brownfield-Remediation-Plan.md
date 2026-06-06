@@ -14,11 +14,11 @@
 * `costCenter` ↔ workload mapping from finance.
 * Existing CA / DLP / Defender policy inventory.
 
-## 🚀 Stage A change (June 2026) — W4 (private endpoints) is now one-shot
+## Hub-connected W4 (private endpoints) is one-shot
 
 The Stage A networking refactor added `networkMode='hub-connected'` to
-`main.bicep`. If the customer already runs a CAF/ALZ-style hub with central
-Azure Firewall and central Private DNS Zones, the spoke side of W4 is now a
+`main.bicep`. If your tenant already runs a CAF/ALZ-style hub with central
+Azure Firewall and central Private DNS Zones, the spoke side of W4 is a
 single deploy:
 
 1. Copy `infra/bicep/parameters/enterprise-hub-connected.sample.bicepparam`.
@@ -73,7 +73,7 @@ Most customers can NOT do this in one weekend. Suggested phasing:
 | W4 | Migrate to private endpoints. | 1 workload/sprint. | DNS revert + re-enable publicNetworkAccess. |
 | W5 | Promote policy to Deny ring-by-ring (sandbox → dev → prod). | 1 ring/week. | `policy/assign-mg-initiative.ps1` re-apply with `-Mode Audit`. |
 | W6 | Enable Defender for AI Workloads (use the AINE def to surface coverage gaps first). | 1 week. | Set Defender pricing back to Free. |
-| W7 | Enable Phase C report-only CA + Purview DLP. Run for 4 weeks. | 4 weeks. | Set state back to `disabled`. |
+| W7 | Enable shadow-AI report-only CA + Purview DLP. Run for 4 weeks. | 4 weeks. | Set state back to `disabled`. |
 | W8 | Promote CA + DLP to enforced after CISO sign-off. | 1 week. | Same — flip state back. |
 | W9 | Decommission shadow APIs that bypass APIM. | Long tail. | App owner re-codes for short term. |
 
@@ -90,7 +90,7 @@ Before W3 you MUST:
 
 ## 5. Cost attribution backfill
 
-The Phase A FOCUS export captures forward-going cost from the moment
+The FOCUS export captures forward-going cost from the moment
 you wire it up. For history:
 
 1. Use the Azure Cost Management exports feature to backfill 13 months

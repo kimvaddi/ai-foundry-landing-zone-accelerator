@@ -435,38 +435,38 @@ Costs scale with **model tokens**, **AI Search query volume**, **APIM gateway re
 
 ---
 
-## Validated APIM AI Gateway behavior (live-tested 2026-06-05)
+## APIM AI Gateway configuration
 
-End-to-end smoke against a `prod-hub-connected` deploy in a real tenant. APIM `StandardV2` + `network_mode=none`, Foundry `aif-*` with managed-identity backend auth, AMR Balanced_B0 as APIM external cache for semantic-cache:
+The default policy chain shipped in `apim-policies/` and applied automatically when `enforceApimChokepoint=true` (or when APIM is deployed standalone):
 
-| Policy | Scope | State | Evidence |
-|---|---|---|---|
-| `azure-openai-emit-token-metric` (6 dimensions) | Global inbound | ✅ working | Metrics arriving in App Insights `customMetrics` with `ProjectName`/`UseCase`/`CostCenter` |
-| `set-backend-service` + `authentication-managed-identity` | API inbound | ✅ working | 200 OK chat completion through APIM with no API key |
-| `azure-openai-semantic-cache-lookup` / `-store` (score 0.85, vary by project+use-case) | API inbound/outbound | ✅ working | Cache-hit latency dropped from 2.3s → 1.7s on identical prompts |
-| `azure-openai-token-limit` (subscription-keyed, 100k TPM) | Product inbound | ✅ working | 429 after threshold; header `x-azure-openai-tokens-consumed` set |
-| `<forward-request />` in global `<backend>` | Global backend | ✅ **REQUIRED — see "lesson learned" below** | Without it APIM returns 200 OK with empty body |
-| `<llm-content-safety>` (Foundry-bundled `/contentsafety`) | API inbound | ✅ fixed 2026-06-05 — backend needs `credentials.managedIdentity.resource = "https://cognitiveservices.azure.com"` | See "lesson learned (2)" below |
+| Policy | Scope | Purpose |
+|---|---|---|
+| `azure-openai-emit-token-metric` (6 dimensions) | Global inbound | Per-request token + cost telemetry to App Insights `customMetrics` with `ProjectName` / `UseCase` / `CostCenter` |
+| `set-backend-service` + `authentication-managed-identity` | API inbound | Managed-identity backend auth — no API key in client requests |
+| `azure-openai-semantic-cache-lookup` / `-store` (score 0.85, vary by project+use-case) | API inbound/outbound | Cache hits return without a backend round-trip |
+| `azure-openai-token-limit` (subscription-keyed, 100k TPM) | Product inbound | Returns `429` plus `x-azure-openai-tokens-consumed` header above the threshold |
+| `<backend><forward-request /></backend>` | Global backend | Required — see configuration note (1) below |
+| `<llm-content-safety>` (Foundry-bundled `/contentsafety`) | API inbound | Inline prompt + completion safety check — see configuration note (2) |
 
-### 🔑 Lesson learned: `<backend />` at global scope silently drops the response body
+### Configuration note (1) — global `<backend />` must be explicit
 
-If the **global** (service-scope) policy has a self-closing `<backend />` element, APIM returns `HTTP 200` with **`Content-Length: 0`** for every request — no error, no log entry, no exception. The fix is to make backend forwarding explicit:
+If the global service-scope policy contains a self-closing `<backend />`, APIM returns `HTTP 200` with `Content-Length: 0` for every request — no error, no log entry, no exception. Use the explicit form:
 
 ```xml
-<!-- ❌ WRONG (silent failure — looks like every other policy is broken) -->
+<!-- WRONG (silent failure) -->
 <backend />
 
-<!-- ✅ CORRECT -->
+<!-- CORRECT -->
 <backend>
   <forward-request />
 </backend>
 ```
 
-This is already fixed in `apim-policies/inbound-emit-metrics.xml` (loaded by both Bicep and Terraform). If you write your own global policy fragment, **do not** copy the self-closing form.
+Already correct in `apim-policies/inbound-emit-metrics.xml`. If you author your own global policy fragment, do not use the self-closing form.
 
-### 🔑 Lesson learned (2): `<llm-content-safety>` requires explicit MI credentials on the backend
+### Configuration note (2) — `<llm-content-safety>` requires MI credentials on the backend
 
-The `<llm-content-safety>` policy authenticates to the Content Safety backend via the **backend's** credentials — not via a policy-level `<authentication-managed-identity>`. Per [Microsoft docs](https://learn.microsoft.com/en-us/azure/api-management/llm-content-safety-policy) and the official [`AI-Gateway/labs/content-safety` sample](https://github.com/Azure-Samples/AI-Gateway/blob/main/labs/content-safety/main.bicep), the `content-safety-backend` resource MUST include:
+The `<llm-content-safety>` policy authenticates to the Content Safety backend via the **backend's** credentials, not via a policy-level `<authentication-managed-identity>`. Per [Microsoft docs](https://learn.microsoft.com/en-us/azure/api-management/llm-content-safety-policy) and the official [`AI-Gateway/labs/content-safety` sample](https://github.com/Azure-Samples/AI-Gateway/blob/main/labs/content-safety/main.bicep), the `content-safety-backend` resource must include:
 
 ```bicep
 properties: {
@@ -480,16 +480,16 @@ properties: {
 }
 ```
 
-Without this block, APIM forwards unauthenticated requests to the Foundry-bundled `/contentsafety` endpoint → backend returns 401 → APIM surfaces a generic `403 "Request failed content safety check"` to the caller for **every** prompt (benign and harmful alike). This was our 2026-06-05 6-hour debug. Both `infra/bicep/modules/ai-gateway/apim-ai-api.bicep` and `infra/terraform/modules/apim/main.tf` now configure these credentials. APIM MI still needs `Cognitive Services User` on the CS account (granted by `apim-foundry-rbac.bicep` for the Foundry-bundled path).
+Without this block, APIM forwards unauthenticated requests to the Foundry-bundled `/contentsafety` endpoint, the backend returns `401`, and APIM surfaces a generic `403 "Request failed content safety check"` for every prompt. Both `infra/bicep/modules/ai-gateway/apim-ai-api.bicep` and `infra/terraform/modules/apim/main.tf` configure these credentials. APIM MI also requires `Cognitive Services User` on the Content Safety account (granted by `apim-foundry-rbac.bicep`).
 
-### Known issues
+### Known constraints
 
-| Issue | Workaround | Status |
-|---|---|---|
-| Teardown may strand a `legionservicelink` Service Association Link on `AIFoundrySubnet` for 30-60+ min after Foundry agent injection is purged | `scripts/deploy.ps1 -Mode teardown` now deletes the agent capability host + CAE **before** the RGs (3-phase ordering). Residual VNet+NSGs cost $0/day. | Fixed in `scripts/deploy.ps1` |
-| APIM StandardV2 doesn't expose `publicIpAddresses` or `outboundPublicIPAddresses`; can't add an APIM-IP allowlist to a Foundry account with `publicNetworkAccess=Enabled` | Use `publicNetworkAccess=Disabled` + private endpoint (the default in `enforceApimChokepoint=true`). Architectural: don't combine StandardV2 with PNA=Enabled + IP allowlist. | Documented |
-| AKS GPU SKU capacity in `eastus2` blocked agent-injection in our test tenant | Set `enableFoundryAgentInjection = false` in the blueprint or change `location` to a region with quota | Documented |
-| `az apim subscription keys list --sid master` returns empty for StandardV2 — must use REST `subscriptions/master/listSecrets` | Use the helper in `scripts/smoke-verify.ps1` (already calls REST) | Documented |
+| Constraint | Workaround |
+|---|---|
+| Foundry agent injection may strand a `legionservicelink` Service Association Link on `AIFoundrySubnet` for 30-60+ min after teardown | `scripts/deploy.ps1 -Mode teardown` deletes the agent capability host + CAE before the resource groups (3-phase ordering). Residual VNet + NSGs cost $0/day. |
+| APIM StandardV2 does not expose `publicIpAddresses` or `outboundPublicIPAddresses` — an APIM-IP allowlist cannot be applied to a Foundry account with `publicNetworkAccess=Enabled` | Use `publicNetworkAccess=Disabled` + private endpoint (default with `enforceApimChokepoint=true`) |
+| AKS GPU SKU capacity is region-constrained and can block Foundry agent injection | Set `enableFoundryAgentInjection = false` or pick a region with quota |
+| `az apim subscription keys list --sid master` returns empty for StandardV2 | Use the REST endpoint `subscriptions/master/listSecrets?api-version=2024-05-01` (helper in `scripts/smoke-verify.ps1`) |
 
 ---
 
