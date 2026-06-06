@@ -360,9 +360,14 @@ See [docs/deployment-guide.md](docs/deployment-guide.md#enforcing-the-apim-choke
 - Skips creating PDNS zones — instead **links the spoke to your existing central zones** via `existingPrivateDnsZones` map
 - Optionally creates a UDR sending `0.0.0.0/0` through the hub firewall (toggle `enableForcedTunneling`)
 - Required inputs:
-  - `hubVnetResourceId` — full resource ID of your hub VNet
-  - `hubFirewallPrivateIp` — for the UDR next hop
-  - `existingPrivateDnsZones` — map of zone name → resource ID of your central zone
+  - `hubVnetResourceId` — full resource ID of your hub VNet  
+    Format: `/subscriptions/<SUB-GUID>/resourceGroups/<HUB-RG>/providers/Microsoft.Network/virtualNetworks/<VNET-NAME>`  
+    Example: `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/virtualNetworks/hub-vnet`  
+    *(Find it in the Portal: open your hub VNet → **Settings → Properties → Resource ID**, or run `az network vnet show -g <hub-rg> -n <vnet-name> --query id -o tsv`)*
+  - `hubFirewallPrivateIp` — for the UDR next hop (e.g. `10.10.0.4`)
+  - `existingPrivateDnsZones` — map of zone name → resource ID of your central zone  
+    Each value uses the same shape: `/subscriptions/<SUB-GUID>/resourceGroups/<HUB-RG>/providers/Microsoft.Network/privateDnsZones/<zone-name>`  
+    Example: `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com`
 
 See [docs/hub-spoke-integration.md](docs/hub-spoke-integration.md) for the wiring runbook.
 

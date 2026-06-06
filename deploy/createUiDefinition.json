@@ -145,11 +145,11 @@
             "type": "Microsoft.Common.TextBox",
             "label": "Hub VNet resource ID",
             "defaultValue": "",
-            "toolTip": "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<name>",
+            "toolTip": "Paste the full ARM resource ID of your existing hub VNet. Format: /subscriptions/<SUB-GUID>/resourceGroups/<RG>/providers/Microsoft.Network/virtualNetworks/<VNET-NAME>. Example: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/virtualNetworks/hub-vnet. Find this in the Portal: open your hub VNet -> Settings -> Properties -> Resource ID.",
             "constraints": {
               "required": true,
               "regex": "^/subscriptions/[0-9a-f-]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+$",
-              "validationMessage": "Must be a full ARM resource ID for a Microsoft.Network/virtualNetworks resource."
+              "validationMessage": "Must be a full ARM resource ID. Expected format: /subscriptions/<SUB-GUID>/resourceGroups/<RG>/providers/Microsoft.Network/virtualNetworks/<VNET-NAME> (e.g. /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/virtualNetworks/hub-vnet)."
             }
           },
           {
@@ -183,7 +183,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Paste the resource IDs of the central private DNS zones in your hub. The spoke will link its private endpoints to these zones (instead of creating new ones)."
+              "text": "Paste the resource IDs of the central private DNS zones in your hub. The spoke will link its private endpoints to these zones (instead of creating new ones). Each resource ID looks like: /subscriptions/<SUB-GUID>/resourceGroups/<HUB-RG>/providers/Microsoft.Network/privateDnsZones/<zone-name>. Find each one in the Portal: open the private DNS zone -> Settings -> Properties -> Resource ID. Leave any zone blank if your hub does not host it."
             }
           },
           {
@@ -191,45 +191,49 @@
             "type": "Microsoft.Common.TextBox",
             "label": "privatelink.vaultcore.azure.net resource ID",
             "defaultValue": "",
-            "toolTip": "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+            "toolTip": "Example: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
           },
           {
             "name": "pdnsOpenai",
             "type": "Microsoft.Common.TextBox",
             "label": "privatelink.openai.azure.com resource ID",
-            "defaultValue": ""
+            "defaultValue": "",
+            "toolTip": "Example: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com"
           },
           {
             "name": "pdnsCognitive",
             "type": "Microsoft.Common.TextBox",
             "label": "privatelink.cognitiveservices.azure.com resource ID",
-            "defaultValue": ""
+            "defaultValue": "",
+            "toolTip": "Example: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/privateDnsZones/privatelink.cognitiveservices.azure.com"
           },
           {
             "name": "pdnsSearch",
             "type": "Microsoft.Common.TextBox",
             "label": "privatelink.search.windows.net resource ID",
-            "defaultValue": ""
+            "defaultValue": "",
+            "toolTip": "Example: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net"
           },
           {
             "name": "pdnsBlob",
             "type": "Microsoft.Common.TextBox",
             "label": "privatelink.blob.core.windows.net resource ID",
-            "defaultValue": ""
+            "defaultValue": "",
+            "toolTip": "Example: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
           },
           {
             "name": "pdnsApim",
             "type": "Microsoft.Common.TextBox",
             "label": "privatelink.azure-api.net resource ID (APIM)",
             "defaultValue": "",
-            "toolTip": "Only required if you deploy APIM in `internal` mode."
+            "toolTip": "Only required if you deploy APIM in internal mode. Example: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/privateDnsZones/privatelink.azure-api.net"
           },
           {
             "name": "pdnsCosmos",
             "type": "Microsoft.Common.TextBox",
             "label": "privatelink.documents.azure.com resource ID (Cosmos)",
             "defaultValue": "",
-            "toolTip": "Only required if a Foundry project enables Agent Service capability host."
+            "toolTip": "Only required if a Foundry project enables Agent Service capability host. Example: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/privateDnsZones/privatelink.documents.azure.com"
           }
         ],
         "visible": "[equals(steps('blueprint').networkMode, 'hub-connected')]"
