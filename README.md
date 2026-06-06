@@ -426,7 +426,7 @@ Indicative monthly costs (USD, eastus2, 730h/mo):
 | `smoke` | **~$50/mo** | LAW + AppI + KV + Foundry S0 + Search Basic + Foundry PE + KV PE — no APIM, no compute |
 | `poc-standalone-spoke` | ~$70/mo | + standalone Search |
 | `poc-hub-connected` | ~$45/mo | smoke − the in-spoke PDNS create cost (you reuse hub's) |
-| `prod-standalone-with-fw` | **~$1,500/mo** | + APIM StandardV2 (~$1,150) + AppGW WAF_v2 (~$300) + Bastion (~$150) + 2 VMs (~$80) + CAE idle (~$100) |
+| `prod-standalone-with-fw` | **\~$1,500/mo** | + APIM StandardV2 (\~$1,150) + AppGW WAF_v2 (\~$300) + Bastion (\~$150) + 2 VMs (\~$80) + CAE idle (\~$100) |
 | `prod-hub-connected` | ~$1,400/mo | same as above minus hub-cost-already-borne (PDNS, firewall) |
 
 Costs scale with **model tokens**, **AI Search query volume**, **APIM gateway requests** — not shown here. Use the FinOps showback workbook to see real burn by `Project` / `CostCenter` / `UseCase` once you have traffic.
