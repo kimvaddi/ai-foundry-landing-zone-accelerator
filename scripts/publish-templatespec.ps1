@@ -158,11 +158,15 @@ $specVersion = New-AzTemplateSpec `
   -Force
 Write-Host "      Spec version ID: $($specVersion.Id)" -ForegroundColor Green
 
+# Compose the FULL version resource ID — what Portal expects.
+# New-AzTemplateSpec returns the parent spec; Portal deeplinks need /versions/<v> appended.
+$versionResourceId = "$($specVersion.Id)/versions/$Version"
+
 # ---- 5. Emit Portal Deploy URL ---------------------------------------------
 Write-Host '[5/5] Generating Portal Deploy URL...' -ForegroundColor Yellow
 # Portal deeplink for Template Spec deployment. The embedded UIFormDefinition
 # is auto-picked up by Portal — no separate createUIDefinitionUri query param.
-$encodedSpecId = [uri]::EscapeDataString($specVersion.Id)
+$encodedSpecId = [uri]::EscapeDataString($versionResourceId)
 $portalUrl     = "https://portal.azure.com/#create/Microsoft.Template/templateSpecVersionId/$encodedSpecId"
 
 Write-Host ''
