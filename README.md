@@ -11,6 +11,8 @@
 > **Click-to-deploy via the Azure Portal.** The button opens a guided wizard with a blueprint picker (`smoke` / `poc-*` / `prod-*`), conditional tabs for hub VNet IDs (only shown when you pick a `hub-connected` blueprint), and per-blueprint defaults for compute, APIM, and safety toggles. Requires `Contributor` on a subscription. See [`deploy/`](deploy/) for the underlying ARM + UI artifacts.
 
 > 🛡️ **You will see a *"Do you trust this template? This author's code has not been verified by Microsoft"* banner — this is expected.** It appears for **any** ARM template hosted outside the Azure Marketplace (including every community template on GitHub). Microsoft cannot certify content the publisher hasn't submitted to Marketplace review, so the Portal asks you to acknowledge the source. You're free to inspect [`deploy/azuredeploy.json`](deploy/azuredeploy.json) and [`deploy/azuredeploy-full.json`](deploy/azuredeploy-full.json) (or pin to a specific commit SHA in the URL) before clicking **I acknowledge**. Removing the banner requires publishing as a Marketplace Managed Application — not in scope for this accelerator.
+>
+> 🏢 **Want to skip the trust banner for a specific customer?** Publish this as an **Azure Template Spec in the customer's own tenant** — Portal treats the customer as the publisher of their own template, so no banner appears. One-time setup, ~2 minutes. See [Customer-tenant deploy via Template Spec](#customer-tenant-deploy-via-template-spec-no-trust-banner) below.
 
 > ℹ️ The Portal's built-in **"Visualize Deployment"** button on the Review tab will appear empty for this template — that's a documented `armviz` limitation when ARM templates use nested/linked deployments (which we do, because everything is built on Azure Verified Modules). Use the diagram below instead.
 
@@ -86,6 +88,7 @@ Both **Bicep** and **Terraform** are first-class — they ship the same architec
 - [What is this?](#what-is-this)
 - [When should I use this?](#when-should-i-use-this)
 - [What you're deploying](#what-youre-deploying)
+- [Customer-tenant deploy via Template Spec (no trust banner)](#customer-tenant-deploy-via-template-spec-no-trust-banner)
 - [Architecture at a glance](#architecture-at-a-glance)
 - [What gets deployed](#what-gets-deployed)
 - [Identity & RBAC](#identity--rbac)
@@ -136,6 +139,42 @@ The accelerator is **forked-from-scratch from the Microsoft AVM patterns** for `
 3. **Brownfield retrofit** — you already have Foundry deployed ad-hoc; assign the policy initiative in `policy/` at audit-only, run the [Enterprise Brownfield Remediation Plan](docs/Enterprise-Brownfield-Remediation-Plan.md) playbook in 9 waves.
 4. **Hub-spoke integration** — your network team owns the hub; you own the AI spoke; one parameter (`networkMode = 'hub-connected'`) + three input values (hub VNet ID, firewall private IP, existing PDNS map) wire everything together.
 5. **AI Gateway adoption** — keep your existing APIM; import the policies from `apim-policies/` per [docs/existing-apim-byo.md](docs/existing-apim-byo.md).
+
+---
+
+## Customer-tenant deploy via Template Spec (no trust banner)
+
+For customer engagements where the **"Do you trust this template?"** banner is friction, publish the accelerator as an **Azure Template Spec** in the customer's own tenant. The Portal treats the customer as the publisher of their own template, so the banner doesn't appear, and the wizard UX is identical.
+
+**Why this works** — Template Specs are first-class Azure resources hosted in the customer's tenant. Unlike a `raw.githubusercontent.com` URL, the Portal isn't fetching content from an unverified third party — it's loading content the customer's own admins published into their own subscription. Microsoft's anti-phishing safeguard doesn't fire.
+
+**One-time publish (run as a tenant admin in the customer subscription):**
+
+```powershell
+# 1. Sign in to the customer subscription
+Connect-AzAccount -Subscription <customer-sub-id>
+
+# 2. Publish (this script lives at scripts/publish-templatespec.ps1)
+./scripts/publish-templatespec.ps1 -SubscriptionId <customer-sub-id>
+
+# Optional: pick a custom RG / region / spec name / version
+./scripts/publish-templatespec.ps1 `
+  -SubscriptionId <customer-sub-id> `
+  -ResourceGroupName rg-platform-templatespecs `
+  -Location swedencentral `
+  -Name ai-foundry-lz-finops `
+  -Version 2026.06.07
+```
+
+The script prints a `https://portal.azure.com/#create/Microsoft.Template/templateSpecVersionId/...` URL — share that with anyone in the customer tenant who needs to deploy. The full 8-step wizard (Basics → Blueprint → … → RBAC → Review) shows up exactly as it does from the GitHub Deploy button, but with **no trust banner**.
+
+**Re-publishing after a fix** — re-run the script with the same `-Name` and either the same `-Version` (overwrites in place; the shared URL keeps working) or a new `-Version` (creates a parallel version so existing pins keep working; update the URL).
+
+**RBAC required** — the publisher needs `Microsoft.Resources/templateSpecs/write` at the chosen RG scope (built-in `Contributor` or higher is sufficient).
+
+**Cost** — Template Specs are free. The hosting resource group costs nothing until customers actually deploy from the spec into their own resource groups.
+
+> Want this banner removed for *everyone* (not just one customer tenant)? That requires publishing to the **Azure Marketplace as a Managed Application** (~4–12 weeks of publisher onboarding + certification). Template Specs are the fast path; Marketplace is the long-term path.
 
 ---
 
