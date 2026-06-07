@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "Deploy the **AI Foundry Landing Zone Accelerator** (FinOps Edition). Pick a blueprint, optionally wire to an existing ALZ hub, and review before deploy. Reference architecture: [github.com/kimvaddi/ai-foundry-landing-zone-accelerator](https://github.com/kimvaddi/ai-foundry-landing-zone-accelerator).",
+        "description": "Deploy the **AI Foundry Landing Zone Accelerator** (FinOps Edition). Pick a blueprint, optionally wire to an existing ALZ hub, and review before deploy. Reference architecture: [github.com/kimvaddi/ai-foundry-landing-zone-accelerator](https://github.com/kimvaddi/ai-foundry-landing-zone-accelerator).\n\n_Note: Azure will show a 'Do you trust this template?' banner because the template is hosted on GitHub (not the Marketplace). This is normal Portal behavior for any community / non-Marketplace template — click **I acknowledge** to proceed._",
         "subscription": {
           "constraints": {
             "validations": [
@@ -15,7 +15,29 @@
                 "message": "Owner or Contributor on the subscription is required (this template creates resource groups)."
               }
             ]
-          }
+          },
+          "resourceProviders": [
+            "Microsoft.ApiManagement",
+            "Microsoft.App",
+            "Microsoft.AlertsManagement",
+            "Microsoft.Authorization",
+            "Microsoft.Cache",
+            "Microsoft.CognitiveServices",
+            "Microsoft.Compute",
+            "Microsoft.Consumption",
+            "Microsoft.CostManagement",
+            "Microsoft.Insights",
+            "Microsoft.KeyVault",
+            "Microsoft.Logic",
+            "Microsoft.ManagedIdentity",
+            "Microsoft.Network",
+            "Microsoft.OperationalInsights",
+            "Microsoft.OperationsManagement",
+            "Microsoft.Resources",
+            "Microsoft.Search",
+            "Microsoft.SecurityInsights",
+            "Microsoft.Storage"
+          ]
         },
         "location": {
           "label": "Primary region",

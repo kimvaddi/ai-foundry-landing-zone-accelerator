@@ -9,7 +9,9 @@
 [📐 **See architecture →**](#what-youre-deploying)
 
 > **Click-to-deploy via the Azure Portal.** The button opens a guided wizard with a blueprint picker (`smoke` / `poc-*` / `prod-*`), conditional tabs for hub VNet IDs (only shown when you pick a `hub-connected` blueprint), and per-blueprint defaults for compute, APIM, and safety toggles. Requires `Contributor` on a subscription. See [`deploy/`](deploy/) for the underlying ARM + UI artifacts.
->
+
+> 🛡️ **You will see a *"Do you trust this template? This author's code has not been verified by Microsoft"* banner — this is expected.** It appears for **any** ARM template hosted outside the Azure Marketplace (including every community template on GitHub). Microsoft cannot certify content the publisher hasn't submitted to Marketplace review, so the Portal asks you to acknowledge the source. You're free to inspect [`deploy/azuredeploy.json`](deploy/azuredeploy.json) and [`deploy/azuredeploy-full.json`](deploy/azuredeploy-full.json) (or pin to a specific commit SHA in the URL) before clicking **I acknowledge**. Removing the banner requires publishing as a Marketplace Managed Application — not in scope for this accelerator.
+
 > ℹ️ The Portal's built-in **"Visualize Deployment"** button on the Review tab will appear empty for this template — that's a documented `armviz` limitation when ARM templates use nested/linked deployments (which we do, because everything is built on Azure Verified Modules). Use the diagram below instead.
 
 ## What you're deploying
