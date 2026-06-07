@@ -45,11 +45,26 @@
         "constraints": {
           "required": true,
           "allowedValues": [
-            { "label": "smoke (cheapest, ephemeral)", "value": "smoke" },
-            { "label": "dev",  "value": "dev" },
-            { "label": "test", "value": "test" },
-            { "label": "poc",  "value": "poc" },
-            { "label": "prod", "value": "prod" }
+            {
+              "label": "smoke (cheapest, ephemeral)",
+              "value": "smoke"
+            },
+            {
+              "label": "dev",
+              "value": "dev"
+            },
+            {
+              "label": "test",
+              "value": "test"
+            },
+            {
+              "label": "poc",
+              "value": "poc"
+            },
+            {
+              "label": "prod",
+              "value": "prod"
+            }
           ]
         }
       },
@@ -84,11 +99,26 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "smoke (~$50/mo — foundation + Foundry + Search Basic)",                  "value": "smoke" },
-                { "label": "poc-standalone-spoke (~$70/mo — adds spoke VNet + 21 PDNS + PEs)",       "value": "poc-standalone-spoke" },
-                { "label": "poc-hub-connected (~$45/mo — peers to your hub, reuses central PDNS)",   "value": "poc-hub-connected" },
-                { "label": "prod-standalone-with-fw (~$1,500/mo — APIM + WAF + Bastion + VMs)",      "value": "prod-standalone-with-fw" },
-                { "label": "prod-hub-connected (~$1,400/mo — Recommended enterprise default)",       "value": "prod-hub-connected" }
+                {
+                  "label": "smoke (~$50/mo — foundation + Foundry + Search Basic)",
+                  "value": "smoke"
+                },
+                {
+                  "label": "poc-standalone-spoke (~$70/mo — adds spoke VNet + 21 PDNS + PEs)",
+                  "value": "poc-standalone-spoke"
+                },
+                {
+                  "label": "poc-hub-connected (~$45/mo — peers to your hub, reuses central PDNS)",
+                  "value": "poc-hub-connected"
+                },
+                {
+                  "label": "prod-standalone-with-fw (~$1,500/mo — APIM + WAF + Bastion + VMs)",
+                  "value": "prod-standalone-with-fw"
+                },
+                {
+                  "label": "prod-hub-connected (~$1,400/mo — Recommended enterprise default)",
+                  "value": "prod-hub-connected"
+                }
               ]
             }
           },
@@ -101,8 +131,14 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "standalone (greenfield) — module creates the spoke VNet + DNS", "value": "standalone" },
-                { "label": "hub-connected (brownfield) — peer to existing ALZ hub",         "value": "hub-connected" }
+                {
+                  "label": "standalone (greenfield) — module creates the spoke VNet + DNS",
+                  "value": "standalone"
+                },
+                {
+                  "label": "hub-connected (brownfield) — peer to existing ALZ hub",
+                  "value": "hub-connected"
+                }
               ]
             }
           },
@@ -265,9 +301,18 @@
             "defaultValue": "internal",
             "constraints": {
               "allowedValues": [
-                { "label": "internal (private, requires VNet line-of-sight)", "value": "internal" },
-                { "label": "external (public gateway + admin private)",       "value": "external" },
-                { "label": "none (no VNet integration — dev only)",           "value": "none" }
+                {
+                  "label": "internal (private, requires VNet line-of-sight)",
+                  "value": "internal"
+                },
+                {
+                  "label": "external (public gateway + admin private)",
+                  "value": "external"
+                },
+                {
+                  "label": "none (no VNet integration — dev only)",
+                  "value": "none"
+                }
               ]
             },
             "visible": "[steps('components').apimDeploy]"
@@ -331,8 +376,14 @@
             "defaultValue": "basic",
             "constraints": {
               "allowedValues": [
-                { "label": "basic (cheap, single replica)",  "value": "basic" },
-                { "label": "standard (HA, 3 replicas)",      "value": "standard" }
+                {
+                  "label": "basic (cheap, single replica)",
+                  "value": "basic"
+                },
+                {
+                  "label": "standard (HA, 3 replicas)",
+                  "value": "standard"
+                }
               ]
             }
           },
@@ -386,7 +437,9 @@
               "regex": "^(?=.{12,})((?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])|(?=.*[A-Z])(?=.*[a-z])(?=.*[^A-Za-z0-9])|(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9])|(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9])).*$",
               "validationMessage": "Min 12 chars, must include 3 of: upper, lower, digit, symbol."
             },
-            "options": { "hideConfirmation": false },
+            "options": {
+              "hideConfirmation": false
+            },
             "visible": "[steps('components').jumpvmDeploy]"
           },
           {
@@ -423,21 +476,29 @@
             "type": "Microsoft.Common.TextBox",
             "label": "Publisher email (local part, before @)",
             "defaultValue": "platform",
-            "constraints": { "required": "[steps('components').apimDeploy]", "regex": "^$|^[A-Za-z0-9._%+-]+$" }
+            "constraints": {
+              "required": "[steps('components').apimDeploy]",
+              "regex": "^$|^[A-Za-z0-9._%+-]+$"
+            }
           },
           {
             "name": "apimPublisherDomain",
             "type": "Microsoft.Common.TextBox",
             "label": "Publisher email domain (after @)",
             "defaultValue": "contoso.com",
-            "constraints": { "required": "[steps('components').apimDeploy]", "regex": "^$|^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$" }
+            "constraints": {
+              "required": "[steps('components').apimDeploy]",
+              "regex": "^$|^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+            }
           },
           {
             "name": "apimPublisherName",
             "type": "Microsoft.Common.TextBox",
             "label": "Publisher display name",
             "defaultValue": "AI Platform",
-            "constraints": { "required": "[steps('components').apimDeploy]" }
+            "constraints": {
+              "required": "[steps('components').apimDeploy]"
+            }
           },
           {
             "name": "apimProductTokensPerMinute",
@@ -468,10 +529,22 @@
             "defaultValue": 4,
             "constraints": {
               "allowedValues": [
-                { "label": "0 — block all (most strict)",                "value": 0 },
-                { "label": "2 — block low+ severity",                    "value": 2 },
-                { "label": "4 — block medium+ severity (recommended)",   "value": 4 },
-                { "label": "6 — block only high severity (most lenient)", "value": 6 }
+                {
+                  "label": "0 — block all (most strict)",
+                  "value": 0
+                },
+                {
+                  "label": "2 — block low+ severity",
+                  "value": 2
+                },
+                {
+                  "label": "4 — block medium+ severity (recommended)",
+                  "value": 4
+                },
+                {
+                  "label": "6 — block only high severity (most lenient)",
+                  "value": 6
+                }
               ]
             },
             "visible": "[or(steps('apim').enableContentSafety, steps('apim').enablePromptShields)]"
@@ -484,12 +557,55 @@
             "toolTip": "Provisions Azure Managed Redis (Balanced_B0) + APIM external cache + embeddings backend. ~60-80% cost savings on repeat prompts."
           },
           {
-            "name": "embeddingsDeploymentName",
-            "type": "Microsoft.Common.TextBox",
-            "label": "Embeddings deployment name (for semantic cache)",
-            "defaultValue": "text-embedding-3-large",
-            "toolTip": "Must match a model deployment configured below.",
+            "name": "embeddingsInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[steps('apim').enableSemanticCache]",
+            "options": {
+              "icon": "Info",
+              "text": "Semantic cache needs an embedding model. Microsoft's 2025 guidance: text-embedding-3-small is the recommended default for cache lookup (faster, ~1x cost, sufficient accuracy). Use text-embedding-3-large only when you need higher recall on subtle prompt similarity (~5x cost, doubles Redis vector storage). text-embedding-ada-002 is legacy and kept for back-compat. The picked model is auto-added to the Models & Projects JSON on the next tab."
+            }
+          },
+          {
+            "name": "embeddingsModel",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Embedding model for semantic cache",
+            "defaultValue": "text-embedding-3-small",
+            "toolTip": "Picked model is auto-included in the Model deployments JSON on the next tab.",
+            "constraints": {
+              "required": "[steps('apim').enableSemanticCache]",
+              "allowedValues": [
+                {
+                  "label": "text-embedding-3-small (Recommended — Microsoft default, ~1x cost)",
+                  "value": "text-embedding-3-small"
+                },
+                {
+                  "label": "text-embedding-3-large (Higher recall, ~5x cost, doubles Redis vector storage)",
+                  "value": "text-embedding-3-large"
+                },
+                {
+                  "label": "text-embedding-ada-002 (Legacy — older generation, kept for back-compat)",
+                  "value": "text-embedding-ada-002"
+                },
+                {
+                  "label": "Custom (you manage the Models JSON entry yourself)",
+                  "value": "_custom"
+                }
+              ]
+            },
             "visible": "[steps('apim').enableSemanticCache]"
+          },
+          {
+            "name": "embeddingsCustomName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Custom embedding deployment name",
+            "defaultValue": "",
+            "toolTip": "Must match the 'name' field of an entry you add yourself to the Model deployments JSON on the next tab.",
+            "constraints": {
+              "required": "[and(coalesce(steps('apim').enableSemanticCache, false), equals(coalesce(steps('apim').embeddingsModel, ''), '_custom'))]",
+              "regex": "^$|^[a-zA-Z][a-zA-Z0-9-]{1,63}$",
+              "validationMessage": "Letters, digits, hyphens; must start with a letter; 2-64 chars."
+            },
+            "visible": "[and(coalesce(steps('apim').enableSemanticCache, false), equals(coalesce(steps('apim').embeddingsModel, ''), '_custom'))]"
           }
         ],
         "visible": "[steps('components').apimDeploy]"
@@ -508,11 +624,20 @@
             }
           },
           {
+            "name": "modelsEmbeddingsAutoInjectInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[and(coalesce(steps('components').apimDeploy, false), coalesce(steps('apim').enableSemanticCache, false))]",
+            "options": {
+              "icon": "Info",
+              "text": "Because you enabled APIM semantic cache, the embedding model you picked on the APIM tab has been auto-added to the Model deployments JSON below. If you switched to Custom, you must add your own entry with the matching name."
+            }
+          },
+          {
             "name": "modelDeployments",
             "type": "Microsoft.Common.TextBox",
             "label": "Model deployments (JSON array)",
             "multiLine": true,
-            "defaultValue": "[if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '[{\"name\":\"gpt-4o\",\"model\":{\"format\":\"OpenAI\",\"name\":\"gpt-4o\",\"version\":\"2024-11-20\"},\"sku\":{\"name\":\"GlobalStandard\",\"capacity\":50}},{\"name\":\"text-embedding-3-large\",\"model\":{\"format\":\"OpenAI\",\"name\":\"text-embedding-3-large\",\"version\":\"1\"},\"sku\":{\"name\":\"Standard\",\"capacity\":10}}]', '[{\"name\":\"gpt-4o-mini\",\"model\":{\"format\":\"OpenAI\",\"name\":\"gpt-4o-mini\",\"version\":\"2024-07-18\"},\"sku\":{\"name\":\"GlobalStandard\",\"capacity\":10}}]')]",
+            "defaultValue": "[concat('[', if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '{\"name\":\"gpt-4o\",\"model\":{\"format\":\"OpenAI\",\"name\":\"gpt-4o\",\"version\":\"2024-11-20\"},\"sku\":{\"name\":\"GlobalStandard\",\"capacity\":50}}', '{\"name\":\"gpt-4o-mini\",\"model\":{\"format\":\"OpenAI\",\"name\":\"gpt-4o-mini\",\"version\":\"2024-07-18\"},\"sku\":{\"name\":\"GlobalStandard\",\"capacity\":10}}'), if(and(coalesce(steps('components').apimDeploy, false), coalesce(steps('apim').enableSemanticCache, false), not(equals(coalesce(steps('apim').embeddingsModel, ''), '_custom'))), if(equals(coalesce(steps('apim').embeddingsModel, ''), 'text-embedding-3-small'), ',{\"name\":\"text-embedding-3-small\",\"model\":{\"format\":\"OpenAI\",\"name\":\"text-embedding-3-small\",\"version\":\"1\"},\"sku\":{\"name\":\"Standard\",\"capacity\":10}}', if(equals(coalesce(steps('apim').embeddingsModel, ''), 'text-embedding-3-large'), ',{\"name\":\"text-embedding-3-large\",\"model\":{\"format\":\"OpenAI\",\"name\":\"text-embedding-3-large\",\"version\":\"1\"},\"sku\":{\"name\":\"Standard\",\"capacity\":10}}', if(equals(coalesce(steps('apim').embeddingsModel, ''), 'text-embedding-ada-002'), ',{\"name\":\"text-embedding-ada-002\",\"model\":{\"format\":\"OpenAI\",\"name\":\"text-embedding-ada-002\",\"version\":\"2\"},\"sku\":{\"name\":\"Standard\",\"capacity\":10}}', ''))), ''), ']')]",
             "toolTip": "Array of { name, model:{format,name,version}, sku:{name,capacity} } objects.",
             "constraints": {
               "required": true,
@@ -562,7 +687,9 @@
               "confirmPassword": "Confirm URL"
             },
             "toolTip": "From Teams channel → Workflows → 'Post to a channel when a webhook request is received'. SecureString — never logged.",
-            "options": { "hideConfirmation": true },
+            "options": {
+              "hideConfirmation": true
+            },
             "constraints": {
               "required": false,
               "regex": "^$|^https://[^\\s]+\\.webhook\\.office\\.com/.+$",
@@ -677,79 +804,101 @@
       }
     ],
     "outputs": {
-      "workload":                       "[basics('workload')]",
-      "env":                            "[basics('env')]",
-      "location":                       "[location()]",
-      "searchLocation":                 "[if(empty(steps('blueprint').searchLocation), location(), steps('blueprint').searchLocation)]",
+      "workload": "[basics('workload')]",
+      "env": "[basics('env')]",
+      "location": "[location()]",
+      "searchLocation": "[if(empty(steps('blueprint').searchLocation), location(), steps('blueprint').searchLocation)]",
       "tags": {
-        "workload":   "[basics('workload')]",
-        "env":        "[basics('env')]",
+        "workload": "[basics('workload')]",
+        "env": "[basics('env')]",
         "costCenter": "[basics('costCenter')]",
-        "blueprint":  "[steps('blueprint').blueprintPicker]",
-        "managedBy":  "klz-accelerator"
+        "blueprint": "[steps('blueprint').blueprintPicker]",
+        "managedBy": "klz-accelerator"
       },
-      "networkMode":                    "[steps('blueprint').networkMode]",
-      "vnetAddressSpace":               "[steps('blueprint').vnetAddressSpace]",
-      "hubVnetResourceId":              "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').hubVnetResourceId, '')]",
-      "hubFirewallPrivateIp":           "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').hubFirewallPrivateIp, '')]",
-      "enableForcedTunneling":          "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').enableForcedTunneling, false)]",
-      "createReverseHubPeer":           "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').createReverseHubPeer, false)]",
+      "networkMode": "[steps('blueprint').networkMode]",
+      "vnetAddressSpace": "[steps('blueprint').vnetAddressSpace]",
+      "hubVnetResourceId": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').hubVnetResourceId, '')]",
+      "hubFirewallPrivateIp": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').hubFirewallPrivateIp, '')]",
+      "enableForcedTunneling": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').enableForcedTunneling, false)]",
+      "createReverseHubPeer": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').createReverseHubPeer, false)]",
       "existingPrivateDnsZones": {
-        "vaultcore":         "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsVaultcore, '')]",
-        "openai":            "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsOpenai,    '')]",
+        "vaultcore": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsVaultcore, '')]",
+        "openai": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsOpenai,    '')]",
         "cognitiveServices": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsCognitive, '')]",
-        "search":            "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsSearch,    '')]",
-        "blob":              "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsBlob,      '')]",
-        "apim":              "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsApim,      '')]",
-        "cosmosSql":         "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsCosmos,    '')]"
+        "search": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsSearch,    '')]",
+        "blob": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsBlob,      '')]",
+        "apim": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsApim,      '')]",
+        "cosmosSql": "[if(equals(steps('blueprint').networkMode, 'hub-connected'), steps('hub').pdnsCosmos,    '')]"
       },
-      "enforceApimChokepoint":          "[and(steps('components').apimDeploy, coalesce(steps('components').enforceApimChokepoint, false))]",
-      "allowCaeBypass":                 false,
-      "allowAgentSubnetBypass":         true,
+      "enforceApimChokepoint": "[and(steps('components').apimDeploy, coalesce(steps('components').enforceApimChokepoint, false))]",
+      "allowCaeBypass": false,
+      "allowAgentSubnetBypass": true,
       "components": {
-        "bastion":          { "deploy": "[steps('components').bastionDeploy]",    "sku": "Standard" },
-        "jumpvm":           { "deploy": "[steps('components').jumpvmDeploy]",     "sku": "Standard_B2s" },
-        "buildvm":          { "deploy": "[steps('components').buildvmDeploy]",    "sku": "Standard_B2s" },
-        "appGateway":       { "deploy": "[steps('components').appGatewayDeploy]", "wafEnabled": true, "sku": "WAF_v2" },
-        "containerAppsEnv": { "deploy": "[steps('components').caeDeploy]" },
+        "bastion": {
+          "deploy": "[steps('components').bastionDeploy]",
+          "sku": "Standard"
+        },
+        "jumpvm": {
+          "deploy": "[steps('components').jumpvmDeploy]",
+          "sku": "Standard_B2s"
+        },
+        "buildvm": {
+          "deploy": "[steps('components').buildvmDeploy]",
+          "sku": "Standard_B2s"
+        },
+        "appGateway": {
+          "deploy": "[steps('components').appGatewayDeploy]",
+          "wafEnabled": true,
+          "sku": "WAF_v2"
+        },
+        "containerAppsEnv": {
+          "deploy": "[steps('components').caeDeploy]"
+        },
         "apim": {
-          "deploy":      "[steps('components').apimDeploy]",
-          "sku":         "StandardV2",
+          "deploy": "[steps('components').apimDeploy]",
+          "sku": "StandardV2",
           "networkMode": "[if(steps('components').apimDeploy, steps('components').apimNetworkMode, 'none')]"
         },
-        "standaloneSearch": { "deploy": true, "sku": "[steps('components').standaloneSearchSku]" },
-        "notifications":    { "deploy": "[steps('components').notificationsDeploy]" },
-        "otelCollector":    { "deploy": false }
+        "standaloneSearch": {
+          "deploy": true,
+          "sku": "[steps('components').standaloneSearchSku]"
+        },
+        "notifications": {
+          "deploy": "[steps('components').notificationsDeploy]"
+        },
+        "otelCollector": {
+          "deploy": false
+        }
       },
-      "containerAppsEnvInternal":       true,
-      "enableFoundryAgentInjection":    "[steps('components').enableFoundryAgentInjection]",
-      "createFoundryCapabilityHost":    "[and(steps('components').enableFoundryAgentInjection, coalesce(steps('components').createFoundryCapabilityHost, false))]",
-      "foundryByorConnections":         [],
-      "autoWireSearchConnection":       true,
-      "modelDeployments":               "[parse(steps('modelsAndProjects').modelDeployments)]",
-      "foundryProjects":                "[parse(steps('modelsAndProjects').foundryProjects)]",
-      "apimPublisherLocalPart":         "[if(steps('components').apimDeploy, steps('apim').apimPublisherLocalPart, 'platform')]",
-      "apimPublisherDomain":            "[if(steps('components').apimDeploy, steps('apim').apimPublisherDomain, 'example.com')]",
-      "apimPublisherName":              "[if(steps('components').apimDeploy, steps('apim').apimPublisherName, 'AI Platform')]",
-      "apimProductTokensPerMinute":     "[if(steps('components').apimDeploy, int(steps('apim').apimProductTokensPerMinute), 50000)]",
-      "enableContentSafety":            "[and(steps('components').apimDeploy, coalesce(steps('apim').enableContentSafety, false))]",
-      "enablePromptShields":            "[and(steps('components').apimDeploy, coalesce(steps('apim').enablePromptShields, false))]",
-      "safetyThreshold":                "[if(steps('components').apimDeploy, int(coalesce(steps('apim').safetyThreshold, 4)), 4)]",
-      "enableSemanticCache":            "[and(steps('components').apimDeploy, coalesce(steps('apim').enableSemanticCache, false))]",
-      "embeddingsDeploymentName":       "[if(steps('components').apimDeploy, steps('apim').embeddingsDeploymentName, 'text-embedding-3-large')]",
-      "deployNotifications":            "[steps('components').notificationsDeploy]",
-      "enableNotificationsLogicApp":    "[and(steps('components').notificationsDeploy, coalesce(steps('notifications').enableNotificationsLogicApp, false))]",
-      "teamsWebhookUrl":                "[if(steps('components').notificationsDeploy, steps('notifications').teamsWebhookUrl, '')]",
-      "notificationEmails":             "[if(steps('components').notificationsDeploy, steps('notifications').notificationEmails, '')]",
-      "otelSecondaryEndpoint":          "",
-      "jumpvmAdminPassword":            "[if(steps('components').jumpvmDeploy, steps('compute').jumpvmAdminPassword, '')]",
-      "buildvmSshPublicKey":            "[if(steps('components').buildvmDeploy, steps('compute').buildvmSshPublicKey, '')]",
-      "enablePostDeployRbac":           "[coalesce(steps('rbac').enablePostDeployRbac, false)]",
-      "foundryAdminGroupObjectId":      "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryAdminGroupObjectId, '')]",
-      "foundryLeadGroupObjectId":       "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryLeadGroupObjectId, '')]",
-      "foundryDeveloperGroupObjectId":  "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryDeveloperGroupObjectId, '')]",
-      "platformReaderGroupObjectId":    "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').platformReaderGroupObjectId, '')]",
-      "deploymentSpnObjectId":          "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').deploymentSpnObjectId, '')]"
+      "containerAppsEnvInternal": true,
+      "enableFoundryAgentInjection": "[steps('components').enableFoundryAgentInjection]",
+      "createFoundryCapabilityHost": "[and(steps('components').enableFoundryAgentInjection, coalesce(steps('components').createFoundryCapabilityHost, false))]",
+      "foundryByorConnections": [],
+      "autoWireSearchConnection": true,
+      "modelDeployments": "[parse(steps('modelsAndProjects').modelDeployments)]",
+      "foundryProjects": "[parse(steps('modelsAndProjects').foundryProjects)]",
+      "apimPublisherLocalPart": "[if(steps('components').apimDeploy, steps('apim').apimPublisherLocalPart, 'platform')]",
+      "apimPublisherDomain": "[if(steps('components').apimDeploy, steps('apim').apimPublisherDomain, 'example.com')]",
+      "apimPublisherName": "[if(steps('components').apimDeploy, steps('apim').apimPublisherName, 'AI Platform')]",
+      "apimProductTokensPerMinute": "[if(steps('components').apimDeploy, int(steps('apim').apimProductTokensPerMinute), 50000)]",
+      "enableContentSafety": "[and(steps('components').apimDeploy, coalesce(steps('apim').enableContentSafety, false))]",
+      "enablePromptShields": "[and(steps('components').apimDeploy, coalesce(steps('apim').enablePromptShields, false))]",
+      "safetyThreshold": "[if(steps('components').apimDeploy, int(coalesce(steps('apim').safetyThreshold, 4)), 4)]",
+      "enableSemanticCache": "[and(steps('components').apimDeploy, coalesce(steps('apim').enableSemanticCache, false))]",
+      "embeddingsDeploymentName": "[if(and(coalesce(steps('components').apimDeploy, false), coalesce(steps('apim').enableSemanticCache, false)), if(equals(coalesce(steps('apim').embeddingsModel, ''), '_custom'), steps('apim').embeddingsCustomName, coalesce(steps('apim').embeddingsModel, 'text-embedding-3-small')), 'text-embedding-3-small')]",
+      "deployNotifications": "[steps('components').notificationsDeploy]",
+      "enableNotificationsLogicApp": "[and(steps('components').notificationsDeploy, coalesce(steps('notifications').enableNotificationsLogicApp, false))]",
+      "teamsWebhookUrl": "[if(steps('components').notificationsDeploy, steps('notifications').teamsWebhookUrl, '')]",
+      "notificationEmails": "[if(steps('components').notificationsDeploy, steps('notifications').notificationEmails, '')]",
+      "otelSecondaryEndpoint": "",
+      "jumpvmAdminPassword": "[if(steps('components').jumpvmDeploy, steps('compute').jumpvmAdminPassword, '')]",
+      "buildvmSshPublicKey": "[if(steps('components').buildvmDeploy, steps('compute').buildvmSshPublicKey, '')]",
+      "enablePostDeployRbac": "[coalesce(steps('rbac').enablePostDeployRbac, false)]",
+      "foundryAdminGroupObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryAdminGroupObjectId, '')]",
+      "foundryLeadGroupObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryLeadGroupObjectId, '')]",
+      "foundryDeveloperGroupObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryDeveloperGroupObjectId, '')]",
+      "platformReaderGroupObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').platformReaderGroupObjectId, '')]",
+      "deploymentSpnObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').deploymentSpnObjectId, '')]"
     }
   }
 }
