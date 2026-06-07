@@ -628,7 +628,16 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "The 'Model & version' dropdown is live-loaded from Azure for the region you picked on the Basics tab — only OpenAI models in 'GenerallyAvailable' status are listed. Defaults below are tuned for major US regions; if you chose another region, re-pick each row from the dropdown."
+              "text": "The 'Model & version' dropdown is live-loaded from Azure for the region you picked on the Basics tab — only OpenAI-format models in 'GenerallyAvailable' status are listed (works for both Foundry / AIServices and legacy OpenAI account kinds). Defaults below are tuned for major US regions; if you chose another region, re-pick each row from the dropdown."
+            }
+          },
+          {
+            "name": "modelsLoadedInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[not(empty(coalesce(steps('modelsAndProjects').getFoundryModels.value, parse('[]'))))]",
+            "options": {
+              "icon": "Info",
+              "text": "[concat('Region ', location(), ': loaded ', string(length(coalesce(steps('modelsAndProjects').getFoundryModels.value, parse('[]')))), ' total Foundry models from Azure (', string(length(filter(coalesce(steps('modelsAndProjects').getFoundryModels.value, parse('[]')), (item) => and(equals(item.model.format, 'OpenAI'), equals(item.model.lifecycleStatus, 'GenerallyAvailable'))))), ' OpenAI-format + GA, shown in dropdown).')]"
             }
           },
           {
@@ -637,7 +646,7 @@
             "visible": "[empty(coalesce(steps('modelsAndProjects').getFoundryModels.value, parse('[]')))]",
             "options": {
               "icon": "Error",
-              "text": "No Foundry / Azure OpenAI models were found in your selected region. Go back to the Basics tab and pick a region with Azure OpenAI availability (e.g. eastus2, swedencentral, westus3), or use the Bicep / Terraform stack directly."
+              "text": "No Foundry / Azure OpenAI models were returned by Azure for your selected region. Go back to the Basics tab and pick a region with Azure OpenAI availability (e.g. eastus2, swedencentral, westus3), or use the Bicep / Terraform stack directly."
             }
           },
           {
@@ -669,7 +678,9 @@
                   "header": "Deployment name",
                   "width": "1.4fr",
                   "element": {
+                    "name": "name",
                     "type": "Microsoft.Common.TextBox",
+                    "label": "Deployment name",
                     "placeholder": "e.g. gpt-4o",
                     "constraints": {
                       "required": true,
@@ -687,13 +698,19 @@
                   "header": "Model & version (region-filtered)",
                   "width": "2.4fr",
                   "element": {
+                    "name": "modelKey",
                     "type": "Microsoft.Common.DropDown",
+                    "label": "Model + version",
+                    "toolTip": "Live-loaded from Azure for the region on the Basics tab. Only OpenAI-format GA models are shown.",
                     "placeholder": "Pick a model + version available in your region",
+                    "multiselect": false,
+                    "selectAll": false,
                     "filter": true,
                     "filterPlaceholder": "Search models (e.g. gpt-4o, embed, o4)",
+                    "multiLine": false,
                     "constraints": {
                       "required": true,
-                      "allowedValues": "[map(filter(coalesce(steps('modelsAndProjects').getFoundryModels.value, parse('[]')), (item) => and(equals(item.kind, 'OpenAI'), equals(item.model.lifecycleStatus, 'GenerallyAvailable'))), (item) => parse(concat('{\"label\":\"', item.model.name, ' \\u00b7 v', item.model.version, '\",\"value\":\"', item.model.name, '|', item.model.version, '\"}')))]"
+                      "allowedValues": "[map(filter(coalesce(steps('modelsAndProjects').getFoundryModels.value, parse('[]')), (item) => and(equals(item.model.format, 'OpenAI'), equals(item.model.lifecycleStatus, 'GenerallyAvailable'))), (item) => parse(concat('{\"label\":\"', item.model.name, ' - v', item.model.version, '\",\"value\":\"', item.model.name, '|', item.model.version, '\"}')))]"
                     }
                   }
                 },
@@ -702,13 +719,19 @@
                   "header": "SKU",
                   "width": "1.4fr",
                   "element": {
+                    "name": "skuName",
                     "type": "Microsoft.Common.DropDown",
+                    "label": "SKU",
                     "placeholder": "Select SKU",
+                    "multiselect": false,
+                    "selectAll": false,
+                    "filter": false,
+                    "multiLine": false,
                     "constraints": {
                       "required": true,
                       "allowedValues": [
                         {
-                          "label": "GlobalStandard (default — global pool)",
+                          "label": "GlobalStandard (default - global pool)",
                           "value": "GlobalStandard"
                         },
                         {
@@ -729,10 +752,12 @@
                 },
                 {
                   "id": "capacity",
-                  "header": "Capacity (TPM ÷ 1000)",
+                  "header": "Capacity (TPM / 1000)",
                   "width": "0.8fr",
                   "element": {
+                    "name": "capacity",
                     "type": "Microsoft.Common.TextBox",
+                    "label": "Capacity",
                     "placeholder": "10",
                     "constraints": {
                       "required": true,
@@ -768,7 +793,9 @@
                   "header": "Project name (slug)",
                   "width": "1fr",
                   "element": {
+                    "name": "name",
                     "type": "Microsoft.Common.TextBox",
+                    "label": "Project name",
                     "placeholder": "e.g. business-unit-a",
                     "constraints": {
                       "required": true,
@@ -786,7 +813,9 @@
                   "header": "Display name",
                   "width": "1.4fr",
                   "element": {
+                    "name": "displayName",
                     "type": "Microsoft.Common.TextBox",
+                    "label": "Display name",
                     "placeholder": "e.g. Business unit A",
                     "constraints": {
                       "required": true,
@@ -804,7 +833,9 @@
                   "header": "Description",
                   "width": "2fr",
                   "element": {
+                    "name": "description",
                     "type": "Microsoft.Common.TextBox",
+                    "label": "Description",
                     "placeholder": "Short description (required so the JSON always has the key).",
                     "constraints": {
                       "required": true,
