@@ -288,18 +288,27 @@
             "toolTip": "Standard SKU Bastion in the spoke. Required to RDP/SSH into the jump or build VMs."
           },
           {
+            "name": "vmCredsInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Each VM you enable below will reveal a matching field on the Compute Credentials step -- Jump VM (Windows) asks for an admin password, Build VM (Linux) asks for an OpenSSH public key. Uncheck any VM you don't plan to log into and the matching credential field disappears."
+            }
+          },
+          {
             "name": "jumpvmDeploy",
             "type": "Microsoft.Common.CheckBox",
             "label": "Deploy Windows jump VM",
             "defaultValue": "[startsWith(steps('blueprint').blueprintPicker, 'prod-')]",
-            "toolTip": "Standard_B2s Windows VM in the JumpboxSubnet. Reached via Bastion."
+            "toolTip": "Standard_B2s Windows VM in the JumpboxSubnet. Reached via Bastion. Checking this will ask for an admin password on the Compute Credentials step."
           },
           {
             "name": "buildvmDeploy",
             "type": "Microsoft.Common.CheckBox",
             "label": "Deploy Linux build VM (CI runner)",
-            "defaultValue": "[equals(steps('blueprint').blueprintPicker, 'prod-standalone-with-fw')]",
-            "toolTip": "Standard_B2s Linux VM in the BuildAgentSubnet. SSH key required."
+            "defaultValue": false,
+            "toolTip": "Standard_B2s Linux VM in the BuildAgentSubnet. Checking this will ask for an OpenSSH public key on the Compute Credentials step (Linux Azure VMs have password auth disabled by policy)."
           },
           {
             "name": "appGatewayDeploy",
