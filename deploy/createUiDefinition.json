@@ -615,12 +615,29 @@
         "label": "Models & Projects",
         "elements": [
           {
+            "name": "getFoundryModels",
+            "type": "Microsoft.Solutions.ArmApiControl",
+            "request": {
+              "method": "GET",
+              "path": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.CognitiveServices/locations/', location(), '/models?api-version=2024-10-01')]"
+            }
+          },
+          {
             "name": "modelsInfo",
             "type": "Microsoft.Common.InfoBox",
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Edit the rows below. Defaults reflect the blueprint you picked on tab 1. Add or delete rows with the toolbar. If you need a model that isn't in the dropdown, use the Bicep or Terraform stack directly."
+              "text": "The 'Model & version' dropdown is live-loaded from Azure for the region you picked on the Basics tab — only OpenAI models in 'GenerallyAvailable' status are listed. Defaults below are tuned for major US regions; if you chose another region, re-pick each row from the dropdown."
+            }
+          },
+          {
+            "name": "modelsEmptyWarning",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[empty(coalesce(steps('modelsAndProjects').getFoundryModels.value, parse('[]')))]",
+            "options": {
+              "icon": "Error",
+              "text": "No Foundry / Azure OpenAI models were found in your selected region. Go back to the Basics tab and pick a region with Azure OpenAI availability (e.g. eastus2, swedencentral, westus3), or use the Bicep / Terraform stack directly."
             }
           },
           {
@@ -637,7 +654,7 @@
             "type": "Microsoft.Common.EditableGrid",
             "ariaLabel": "Edit Azure OpenAI / Foundry model deployments",
             "label": "Model deployments",
-            "defaultValue": "[parse(concat('[', if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '{\"name\":\"gpt-4o\",\"modelName\":\"gpt-4o\",\"modelVersion\":\"2024-11-20\",\"skuName\":\"GlobalStandard\",\"capacity\":\"50\"}', '{\"name\":\"gpt-4o-mini\",\"modelName\":\"gpt-4o-mini\",\"modelVersion\":\"2024-07-18\",\"skuName\":\"GlobalStandard\",\"capacity\":\"10\"}'), if(and(coalesce(steps('components').apimDeploy, false), coalesce(steps('apim').enableSemanticCache, false), not(equals(coalesce(steps('apim').embeddingsModel, ''), '_custom'))), concat(',', if(equals(steps('apim').embeddingsModel, 'text-embedding-3-small'), '{\"name\":\"text-embedding-3-small\",\"modelName\":\"text-embedding-3-small\",\"modelVersion\":\"1\",\"skuName\":\"Standard\",\"capacity\":\"10\"}', if(equals(steps('apim').embeddingsModel, 'text-embedding-3-large'), '{\"name\":\"text-embedding-3-large\",\"modelName\":\"text-embedding-3-large\",\"modelVersion\":\"1\",\"skuName\":\"Standard\",\"capacity\":\"10\"}', if(equals(steps('apim').embeddingsModel, 'text-embedding-ada-002'), '{\"name\":\"text-embedding-ada-002\",\"modelName\":\"text-embedding-ada-002\",\"modelVersion\":\"2\",\"skuName\":\"Standard\",\"capacity\":\"10\"}', '')))), ''), ']'))]",
+            "defaultValue": "[parse(concat('[', if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '{\"name\":\"gpt-4o\",\"modelKey\":\"gpt-4o|2024-11-20\",\"skuName\":\"GlobalStandard\",\"capacity\":\"50\"}', '{\"name\":\"gpt-4o-mini\",\"modelKey\":\"gpt-4o-mini|2024-07-18\",\"skuName\":\"GlobalStandard\",\"capacity\":\"10\"}'), if(and(coalesce(steps('components').apimDeploy, false), coalesce(steps('apim').enableSemanticCache, false), not(equals(coalesce(steps('apim').embeddingsModel, ''), '_custom'))), concat(',', if(equals(steps('apim').embeddingsModel, 'text-embedding-3-small'), '{\"name\":\"text-embedding-3-small\",\"modelKey\":\"text-embedding-3-small|1\",\"skuName\":\"Standard\",\"capacity\":\"10\"}', if(equals(steps('apim').embeddingsModel, 'text-embedding-3-large'), '{\"name\":\"text-embedding-3-large\",\"modelKey\":\"text-embedding-3-large|1\",\"skuName\":\"Standard\",\"capacity\":\"10\"}', if(equals(steps('apim').embeddingsModel, 'text-embedding-ada-002'), '{\"name\":\"text-embedding-ada-002\",\"modelKey\":\"text-embedding-ada-002|2\",\"skuName\":\"Standard\",\"capacity\":\"10\"}', '')))), ''), ']'))]",
             "constraints": {
               "width": "Full",
               "rows": {
@@ -666,74 +683,17 @@
                   }
                 },
                 {
-                  "id": "modelName",
-                  "header": "Model",
-                  "width": "1.6fr",
+                  "id": "modelKey",
+                  "header": "Model & version (region-filtered)",
+                  "width": "2.4fr",
                   "element": {
                     "type": "Microsoft.Common.DropDown",
-                    "placeholder": "Select a model",
+                    "placeholder": "Pick a model + version available in your region",
+                    "filter": true,
+                    "filterPlaceholder": "Search models (e.g. gpt-4o, embed, o4)",
                     "constraints": {
                       "required": true,
-                      "allowedValues": [
-                        {
-                          "label": "gpt-4o (chat, vision)",
-                          "value": "gpt-4o"
-                        },
-                        {
-                          "label": "gpt-4o-mini (cheap chat)",
-                          "value": "gpt-4o-mini"
-                        },
-                        {
-                          "label": "gpt-4.1 (large context)",
-                          "value": "gpt-4.1"
-                        },
-                        {
-                          "label": "gpt-4.1-mini",
-                          "value": "gpt-4.1-mini"
-                        },
-                        {
-                          "label": "o4-mini (reasoning)",
-                          "value": "o4-mini"
-                        },
-                        {
-                          "label": "o3-mini (reasoning)",
-                          "value": "o3-mini"
-                        },
-                        {
-                          "label": "text-embedding-3-small (cheap embeddings)",
-                          "value": "text-embedding-3-small"
-                        },
-                        {
-                          "label": "text-embedding-3-large (higher recall)",
-                          "value": "text-embedding-3-large"
-                        },
-                        {
-                          "label": "text-embedding-ada-002 (legacy)",
-                          "value": "text-embedding-ada-002"
-                        },
-                        {
-                          "label": "whisper (speech-to-text)",
-                          "value": "whisper"
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "id": "modelVersion",
-                  "header": "Version",
-                  "width": "1fr",
-                  "element": {
-                    "type": "Microsoft.Common.TextBox",
-                    "placeholder": "e.g. 2024-11-20 or 1",
-                    "constraints": {
-                      "required": true,
-                      "validations": [
-                        {
-                          "regex": "^[A-Za-z0-9._-]{1,32}$",
-                          "message": "Up to 32 chars; letters/digits/dot/dash/underscore."
-                        }
-                      ]
+                      "allowedValues": "[map(filter(coalesce(steps('modelsAndProjects').getFoundryModels.value, parse('[]')), (item) => and(equals(item.kind, 'OpenAI'), equals(item.model.lifecycleStatus, 'GenerallyAvailable'))), (item) => parse(concat('{\"label\":\"', item.model.name, ' \\u00b7 v', item.model.version, '\",\"value\":\"', item.model.name, '|', item.model.version, '\"}')))]"
                     }
                   }
                 },
@@ -1099,7 +1059,7 @@
       "createFoundryCapabilityHost": "[and(steps('components').enableFoundryAgentInjection, coalesce(steps('components').createFoundryCapabilityHost, false))]",
       "foundryByorConnections": [],
       "autoWireSearchConnection": true,
-      "modelDeployments": "[steps('modelsAndProjects').modelDeployments]",
+      "modelDeployments": "[map(steps('modelsAndProjects').modelDeployments, (row) => parse(concat('{\"name\":\"', row.name, '\",\"model\":{\"format\":\"OpenAI\",\"name\":\"', first(split(row.modelKey, '|')), '\",\"version\":\"', last(split(row.modelKey, '|')), '\"},\"sku\":{\"name\":\"', row.skuName, '\",\"capacity\":', row.capacity, '}}')))]",
       "foundryProjects": "[steps('modelsAndProjects').foundryProjects]",
       "apimPublisherLocalPart": "[if(steps('components').apimDeploy, steps('apim').apimPublisherLocalPart, 'platform')]",
       "apimPublisherDomain": "[if(steps('components').apimDeploy, steps('apim').apimPublisherDomain, 'example.com')]",
