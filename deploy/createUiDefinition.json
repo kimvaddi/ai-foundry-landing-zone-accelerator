@@ -147,8 +147,8 @@
             "defaultValue": "",
             "toolTip": "Paste the full ARM resource ID of your existing hub VNet. Format: /subscriptions/<SUB-GUID>/resourceGroups/<RG>/providers/Microsoft.Network/virtualNetworks/<VNET-NAME>. Example: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/virtualNetworks/hub-vnet. Find this in the Portal: open your hub VNet -> Settings -> Properties -> Resource ID.",
             "constraints": {
-              "required": true,
-              "regex": "^/subscriptions/[0-9a-f-]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+$",
+              "required": "[equals(steps('blueprint').networkMode, 'hub-connected')]",
+              "regex": "^$|^/subscriptions/[0-9a-f-]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+$",
               "validationMessage": "Must be a full ARM resource ID. Expected format: /subscriptions/<SUB-GUID>/resourceGroups/<RG>/providers/Microsoft.Network/virtualNetworks/<VNET-NAME> (e.g. /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub-rg/providers/Microsoft.Network/virtualNetworks/hub-vnet)."
             }
           },
@@ -414,21 +414,21 @@
             "type": "Microsoft.Common.TextBox",
             "label": "Publisher email (local part, before @)",
             "defaultValue": "platform",
-            "constraints": { "required": true, "regex": "^[A-Za-z0-9._%+-]+$" }
+            "constraints": { "required": "[steps('components').apimDeploy]", "regex": "^$|^[A-Za-z0-9._%+-]+$" }
           },
           {
             "name": "apimPublisherDomain",
             "type": "Microsoft.Common.TextBox",
             "label": "Publisher email domain (after @)",
             "defaultValue": "contoso.com",
-            "constraints": { "required": true, "regex": "^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$" }
+            "constraints": { "required": "[steps('components').apimDeploy]", "regex": "^$|^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$" }
           },
           {
             "name": "apimPublisherName",
             "type": "Microsoft.Common.TextBox",
             "label": "Publisher display name",
             "defaultValue": "AI Platform",
-            "constraints": { "required": true }
+            "constraints": { "required": "[steps('components').apimDeploy]" }
           },
           {
             "name": "apimProductTokensPerMinute",
