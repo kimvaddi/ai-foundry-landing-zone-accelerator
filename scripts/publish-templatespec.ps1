@@ -126,8 +126,9 @@ if (-not $ctx) {
   Set-AzContext -Subscription $SubscriptionId | Out-Null
 }
 $ctx = Get-AzContext
-Write-Host "      Account: $($ctx.Account.Id)" -ForegroundColor DarkGray
-Write-Host "      Tenant:  $($ctx.Tenant.Id)" -ForegroundColor DarkGray
+Write-Host "      Account:     $($ctx.Account.Id)" -ForegroundColor DarkGray
+Write-Host "      Tenant:      $($ctx.Tenant.Id)" -ForegroundColor DarkGray
+Write-Host "      Environment: $($ctx.Environment.Name)" -ForegroundColor DarkGray
 
 # ---- 3. Hosting resource group ---------------------------------------------
 Write-Host "[3/5] Ensuring resource group '$ResourceGroupName' exists..." -ForegroundColor Yellow
@@ -166,13 +167,31 @@ $versionResourceId = "$($specVersion.Id)/versions/$Version"
 Write-Host '[5/5] Generating Portal Deploy URL...' -ForegroundColor Yellow
 # Portal deeplink for Template Spec deployment. The embedded UIFormDefinition
 # is auto-picked up by Portal — no separate createUIDefinitionUri query param.
+# Portal host depends on the sovereign cloud the Template Spec lives in:
+#   - AzureCloud           -> portal.azure.com (Commercial)
+#   - AzureUSGovernment    -> portal.azure.us (Gov / DoD; IL2/IL4/IL5)
+#   - AzureChinaCloud      -> portal.azure.cn (operated by 21Vianet)
+#   - AzureGermanCloud     -> portal.microsoftazure.de (decommissioned, kept for completeness)
+# Template Specs are sovereign-cloud-scoped: a spec published in Commercial
+# is NOT addressable from Gov Portal and vice versa. Republish the script
+# inside each cloud's tenant to get a Portal URL for that cloud.
+$portalHost = switch ($ctx.Environment.Name) {
+  'AzureCloud'        { 'portal.azure.com' }
+  'AzureUSGovernment' { 'portal.azure.us' }
+  'AzureChinaCloud'   { 'portal.azure.cn' }
+  'AzureGermanCloud'  { 'portal.microsoftazure.de' }
+  default {
+    Write-Warning "Unknown Az environment '$($ctx.Environment.Name)' — defaulting to portal.azure.com. If you're in a sovereign cloud, edit the URL host."
+    'portal.azure.com'
+  }
+}
 $encodedSpecId = [uri]::EscapeDataString($versionResourceId)
-$portalUrl     = "https://portal.azure.com/#create/Microsoft.Template/templateSpecVersionId/$encodedSpecId"
+$portalUrl     = "https://$portalHost/#create/Microsoft.Template/templateSpecVersionId/$encodedSpecId"
 
 Write-Host ''
 Write-Host '=== DONE ===' -ForegroundColor Cyan
 Write-Host ''
-Write-Host 'Template Spec published. Share this link with the customer:' -ForegroundColor Green
+Write-Host "Template Spec published in $($ctx.Environment.Name). Share this link with the customer:" -ForegroundColor Green
 Write-Host ''
 Write-Host $portalUrl -ForegroundColor White
 Write-Host ''
@@ -185,3 +204,10 @@ Write-Host 'To re-publish (e.g. after a fix), re-run this script with the same N
 Write-Host "  - Same -Version  -> overwrites in place (the same Portal URL keeps working)"
 Write-Host "  - New  -Version  -> creates a new version; update the URL above with the new versionId"
 Write-Host ''
+if ($ctx.Environment.Name -ne 'AzureCloud') {
+  Write-Host "Sovereign cloud reminder:" -ForegroundColor Yellow
+  Write-Host "  This spec is ONLY addressable from $portalHost — a Commercial Portal user cannot deploy it." -ForegroundColor Yellow
+  Write-Host "  To publish into a different cloud, run:" -ForegroundColor Yellow
+  Write-Host "    Disconnect-AzAccount; Connect-AzAccount -Environment <env-name>; ./scripts/publish-templatespec.ps1 ..." -ForegroundColor Yellow
+  Write-Host ''
+}

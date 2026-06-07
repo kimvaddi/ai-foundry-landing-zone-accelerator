@@ -151,11 +151,13 @@ For customer engagements where the **"Do you trust this template?"** banner is f
 **One-time publish (run as a tenant admin in the customer subscription):**
 
 ```powershell
-# 1. Sign in to the customer subscription
+# Commercial (portal.azure.com)
 Connect-AzAccount -Subscription <customer-sub-id>
-
-# 2. Publish (this script lives at scripts/publish-templatespec.ps1)
 ./scripts/publish-templatespec.ps1 -SubscriptionId <customer-sub-id>
+
+# Azure Government (portal.azure.us)
+Connect-AzAccount -Environment AzureUSGovernment -Subscription <gov-sub-id>
+./scripts/publish-templatespec.ps1 -SubscriptionId <gov-sub-id> -Location usgovvirginia
 
 # Optional: pick a custom RG / region / spec name / version
 ./scripts/publish-templatespec.ps1 `
@@ -166,7 +168,9 @@ Connect-AzAccount -Subscription <customer-sub-id>
   -Version 2026.06.07
 ```
 
-The script prints a `https://portal.azure.com/#create/Microsoft.Template/templateSpecVersionId/...` URL — share that with anyone in the customer tenant who needs to deploy. The full 8-step wizard (Basics → Blueprint → … → RBAC → Review) shows up exactly as it does from the GitHub Deploy button, but with **no trust banner**.
+The script auto-detects the Az context's sovereign cloud and emits the correct Portal URL host (`portal.azure.com`, `portal.azure.us`, or `portal.azure.cn`). Share the printed URL with anyone in the customer tenant who needs to deploy. The full 8-step wizard (Basics → Blueprint → … → RBAC → Review) shows up exactly as it does from the GitHub Deploy button, but with **no trust banner**.
+
+> **Sovereign cloud reminder:** Template Specs are isolated to the cloud they live in. A spec published in Commercial is NOT addressable from Gov Portal and vice versa. Re-run the script inside each cloud's tenant to get a Portal URL for that cloud.
 
 **Re-publishing after a fix** — re-run the script with the same `-Name` and either the same `-Version` (overwrites in place; the shared URL keeps working) or a new `-Version` (creates a parallel version so existing pins keep working; update the URL).
 
