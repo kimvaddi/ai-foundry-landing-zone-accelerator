@@ -471,13 +471,25 @@ resource "azurerm_monitor_diagnostic_setting" "apim" {
   enabled_metric { category = "AllMetrics" }
 }
 
-# ---------------- RBAC: APIM SAMI → Cognitive Services User on Foundry --
+# ---------------- RBAC: APIM SAMI → Foundry role pair -------------------
+# Microsoft AI Gateway guidance assigns BOTH roles to the APIM MI:
+#   - Cognitive Services User       (a97b65f3-...): base data-plane access
+#   - Cognitive Services OpenAI User (5e0bd9bd-...): REQUIRED for /openai/*
+#     (chat completions, embeddings). Without it APIM gets 401 from Foundry.
 # Mirrors apim-foundry-rbac.bicep. skip_service_principal_aad_check=true
 # avoids the AAD-replication race when SAMI was just created.
 resource "azurerm_role_assignment" "apim_to_foundry" {
   count                            = var.enable_foundry_rbac ? 1 : 0
   scope                            = var.foundry_account_id
   role_definition_id               = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/a97b65f3-24c7-4388-baec-2e87135dc908"
+  principal_id                     = azurerm_api_management.this.identity[0].principal_id
+  skip_service_principal_aad_check = true
+}
+
+resource "azurerm_role_assignment" "apim_to_foundry_openai" {
+  count                            = var.enable_foundry_rbac ? 1 : 0
+  scope                            = var.foundry_account_id
+  role_definition_id               = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/5e0bd9bd-7b93-4f28-af87-19fc36ad61bd"
   principal_id                     = azurerm_api_management.this.identity[0].principal_id
   skip_service_principal_aad_check = true
 }

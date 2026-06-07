@@ -182,14 +182,19 @@
       "defaultValue": [
         {
           "name": "gpt-4o-mini",
-          "modelName": "gpt-4o-mini",
-          "modelVersion": "2024-07-18",
-          "skuName": "GlobalStandard",
-          "capacity": "10"
+          "model": {
+            "format": "OpenAI",
+            "name": "gpt-4o-mini",
+            "version": "2024-07-18"
+          },
+          "sku": {
+            "name": "GlobalStandard",
+            "capacity": 10
+          }
         }
       ],
       "metadata": {
-        "description": "Models to deploy on the Foundry account. Accepts either the FLAT shape from the Deploy-to-Azure wizard ({ name, modelName, modelVersion, skuName, capacity }) OR the legacy NESTED shape ({ name, model:{format,name,version}, sku:{name,capacity} }) — the wrapper auto-projects per row before forwarding to azuredeploy-full.json."
+        "description": "Models to deploy on the Foundry account."
       }
     },
     "foundryProjects": {
@@ -362,42 +367,49 @@
       "type": "bool",
       "defaultValue": false,
       "metadata": {
-        "description": "Master switch for post-deploy RBAC. When false, no role assignments are emitted regardless of the object IDs below."
+        "description": "Master switch for the post-deploy RBAC module. When false (default), no role assignments are emitted regardless of the object IDs below."
       }
     },
     "foundryAdminGroupObjectId": {
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Entra group object ID -> Foundry Owner on the Foundry account. Leave empty to skip."
+        "description": "Entra group object ID -> Foundry Owner on the Foundry account. Highly privileged. Leave empty to skip."
       }
     },
     "foundryLeadGroupObjectId": {
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Entra group object ID -> Foundry Project Manager on the Foundry account. Leave empty to skip."
+        "description": "Entra group object ID -> Foundry Project Manager on the Foundry account (team leads who publish agents and create projects). Leave empty to skip."
       }
     },
     "foundryDeveloperGroupObjectId": {
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Entra group object ID -> Foundry User on the Foundry account. Leave empty to skip."
+        "description": "Entra group object ID -> Foundry User on the Foundry account (developers who build agents and call models). Leave empty to skip."
       }
     },
     "platformReaderGroupObjectId": {
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Entra group object ID -> Reader on the Foundry account and platform RG. Leave empty to skip."
+        "description": "Entra group object ID -> Reader on the platform RG (auditors / SREs / FinOps). Leave empty to skip."
+      }
+    },
+    "foundryReaderGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Reader on the Foundry account (Foundry-only auditors / read-only data scientists). Leave empty to skip. If omitted but platformReaderGroupObjectId is set, the platform reader group is reused for Foundry Reader for backward compatibility."
       }
     },
     "deploymentSpnObjectId": {
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Service principal object ID -> Contributor on the platform RG (CI/CD). Leave empty to skip."
+        "description": "Service principal object ID -> Contributor on the platform RG (CI/CD pipelines that deploy workloads). Leave empty to skip."
       }
     }
   },
@@ -450,11 +462,11 @@
           "createReverseHubPeer": {
             "value": "[parameters('createReverseHubPeer')]"
           },
-          "deployNotifications": {
-            "value": "[parameters('deployNotifications')]"
-          },
           "deploymentSpnObjectId": {
             "value": "[parameters('deploymentSpnObjectId')]"
+          },
+          "deployNotifications": {
+            "value": "[parameters('deployNotifications')]"
           },
           "embeddingsDeploymentName": {
             "value": "[parameters('embeddingsDeploymentName')]"
@@ -471,11 +483,11 @@
           "enableNotificationsLogicApp": {
             "value": "[parameters('enableNotificationsLogicApp')]"
           },
-          "enablePromptShields": {
-            "value": "[parameters('enablePromptShields')]"
-          },
           "enablePostDeployRbac": {
             "value": "[parameters('enablePostDeployRbac')]"
+          },
+          "enablePromptShields": {
+            "value": "[parameters('enablePromptShields')]"
           },
           "enableSemanticCache": {
             "value": "[parameters('enableSemanticCache')]"
@@ -503,6 +515,9 @@
           },
           "foundryProjects": {
             "value": "[parameters('foundryProjects')]"
+          },
+          "foundryReaderGroupObjectId": {
+            "value": "[parameters('foundryReaderGroupObjectId')]"
           },
           "hubFirewallPrivateIp": {
             "value": "[parameters('hubFirewallPrivateIp')]"

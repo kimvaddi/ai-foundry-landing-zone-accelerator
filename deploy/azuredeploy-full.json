@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "6692376566158132237"
+      "templateHash": "3398161452593886073"
     }
   },
   "parameters": {
@@ -396,7 +396,14 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Entra group object ID -> Reader on the Foundry account AND on the platform RG (auditors / SREs). Leave empty to skip."
+        "description": "Entra group object ID -> Reader on the platform RG (auditors / SREs / FinOps). Leave empty to skip."
+      }
+    },
+    "foundryReaderGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra group object ID -> Reader on the Foundry account (Foundry-only auditors / read-only data scientists). Leave empty to skip. If omitted but platformReaderGroupObjectId is set, the platform reader group is reused for Foundry Reader for backward compatibility."
       }
     },
     "deploymentSpnObjectId": {
@@ -420,8 +427,7 @@
     "apimSku": "[if(and(contains(parameters('components'), 'apim'), contains(parameters('components').apim, 'sku')), parameters('components').apim.sku, 'StandardV2')]",
     "apimWantsVnet": "[and(parameters('components').apim.deploy, not(equals(variables('apimNetworkMode'), 'none')))]",
     "apimPipNameAuto": "[format('pip-apim-{0}', variables('nameSuffix'))]",
-    "deployCae": "[or(parameters('components').containerAppsEnv.deploy, parameters('components').otelCollector.deploy)]",
-    "modelDeploymentsNested": "[map(parameters('modelDeployments'), lambda('m', if(contains(lambdaVariables('m'), 'model'), lambdaVariables('m'), createObject('name', lambdaVariables('m').name, 'model', createObject('format', 'OpenAI', 'name', lambdaVariables('m').modelName, 'version', string(lambdaVariables('m').modelVersion)), 'sku', createObject('name', lambdaVariables('m').skuName, 'capacity', int(lambdaVariables('m').capacity))))))]"
+    "deployCae": "[or(parameters('components').containerAppsEnv.deploy, parameters('components').otelCollector.deploy)]"
   },
   "resources": {
     "rgPlatform": {
@@ -7522,7 +7528,7 @@
             "value": "[reference('law').outputs.workspaceResourceId.value]"
           },
           "modelDeployments": {
-            "value": "[variables('modelDeploymentsNested')]"
+            "value": "[parameters('modelDeployments')]"
           },
           "projects": {
             "value": "[parameters('foundryProjects')]"
@@ -27799,7 +27805,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "10505118718359716778"
+              "templateHash": "2727345983839262661"
             }
           },
           "parameters": {
@@ -27815,31 +27821,41 @@
                 "description": "Principal id (APIM system-assigned MI)."
               }
             },
-            "roleDefinitionId": {
-              "type": "string",
-              "defaultValue": "a97b65f3-24c7-4388-baec-2e87135dc908",
+            "roleDefinitionIds": {
+              "type": "array",
+              "defaultValue": [
+                "a97b65f3-24c7-4388-baec-2e87135dc908",
+                "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd"
+              ],
               "metadata": {
-                "description": "Role definition id (default = Cognitive Services User)."
+                "description": "Role definition IDs to assign. Defaults follow Microsoft AI Gateway guidance: Cognitive Services User + Cognitive Services OpenAI User. Override only if you know what you are removing."
               }
             }
           },
           "resources": [
             {
+              "copy": {
+                "name": "ra",
+                "count": "[length(parameters('roleDefinitionIds'))]"
+              },
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
-              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('principalId'), parameters('roleDefinitionId'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('principalId'), parameters('roleDefinitionIds')[copyIndex()])]",
               "properties": {
                 "principalId": "[parameters('principalId')]",
                 "principalType": "ServicePrincipal",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', parameters('roleDefinitionId'))]"
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', parameters('roleDefinitionIds')[copyIndex()])]"
               }
             }
           ],
           "outputs": {
-            "roleAssignmentId": {
-              "type": "string",
-              "value": "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('principalId'), parameters('roleDefinitionId')))]"
+            "roleAssignmentIds": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('roleDefinitionIds'))]",
+                "input": "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('principalId'), parameters('roleDefinitionIds')[copyIndex()]))]"
+              }
             }
           }
         }
@@ -31318,9 +31334,7 @@
           "foundryDeveloperGroupObjectId": {
             "value": "[parameters('foundryDeveloperGroupObjectId')]"
           },
-          "foundryReaderGroupObjectId": {
-            "value": "[parameters('platformReaderGroupObjectId')]"
-          },
+          "foundryReaderGroupObjectId": "[if(empty(parameters('foundryReaderGroupObjectId')), createObject('value', parameters('platformReaderGroupObjectId')), createObject('value', parameters('foundryReaderGroupObjectId')))]",
           "foundryAccountPrincipalId": {
             "value": "[reference('foundry').outputs.principalId.value]"
           },

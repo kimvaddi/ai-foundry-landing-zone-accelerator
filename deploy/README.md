@@ -53,11 +53,19 @@ Use the [Create UI Definition sandbox](https://portal.azure.com/?feature.customp
 
 1. Open the sandbox, paste the contents of `createUiDefinition.json`, click **Preview**.
 2. Walk through every tab; confirm conditional visibility on the Hub, Compute, APIM, Notifications, and Identity & RBAC steps.
-3. On the final step, expand **View outputs** to verify the `components` object, `existingPrivateDnsZones` map, and the 6 RBAC parameters (`enablePostDeployRbac`, `foundryAdminGroupObjectId`, `foundryLeadGroupObjectId`, `foundryDeveloperGroupObjectId`, `platformReaderGroupObjectId`, `deploymentSpnObjectId`) are well-formed.
+3. On the final step, expand **View outputs** to verify the `components` object, `existingPrivateDnsZones` map, and the 7 RBAC parameters (`enablePostDeployRbac`, `foundryAdminGroupObjectId`, `foundryLeadGroupObjectId`, `foundryDeveloperGroupObjectId`, `platformReaderGroupObjectId`, `foundryReaderGroupObjectId`, `deploymentSpnObjectId`) are well-formed.
 
 ### Identity & RBAC tab — supplying object IDs
 
-The Identity & RBAC step is hidden behind a master toggle (`enablePostDeployRbac`) that defaults OFF. When toggled on, six text fields accept Entra object IDs (GUID format). Each is independently optional — leave blank to skip that specific role assignment. See the [**Identity & RBAC**](../README.md#identity--rbac) section of the root README for the full role mapping and the `az ad group show` / `az ad sp show` commands to discover IDs.
+The Identity & RBAC step always shows the **auto-created service-to-service grants** as info text (no input needed — these happen whenever the relevant component is deployed). Human grants are gated by the `enablePostDeployRbac` master toggle (default OFF). When toggled on, seven text fields accept Entra object IDs (GUID format). Each is independently optional — leave blank to skip that specific role assignment.
+
+Auto-created on every deploy (when the component is present):
+- APIM managed identity → Foundry: **Cognitive Services User** + **Cognitive Services OpenAI User** (Microsoft AI Gateway best-practice pair; the OpenAI User role is required for `/chat/completions` and `/embeddings`).
+- Foundry account managed identity → Search: **Search Index Data Reader**.
+- Each Foundry project managed identity → **Foundry User** on parent account + **Search Index Data Reader**.
+- JumpVM + BuildVM managed identities → KV: **Key Vault Secrets User**.
+
+See the [**Identity & RBAC**](../README.md#identity--rbac) section of the root README for the full role mapping and the `az ad group show` / `az ad sp show` commands to discover IDs.
 
 ## Validating the wrapper (optional)
 

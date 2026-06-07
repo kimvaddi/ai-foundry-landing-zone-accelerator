@@ -918,15 +918,24 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Implements Microsoft's recommended Foundry RBAC model (learn.microsoft.com/azure/ai-foundry/concepts/rbac-azure-ai-foundry). Default = OFF. Toggle on to assign Foundry Owner / Project Manager / User to Entra groups, plus Foundry MI → Search Index Data Reader and VM MIs → Key Vault Secrets User. Every field is optional — leave blank to skip an individual assignment. All assignments use role GUIDs (rename-safe)."
+              "text": "Implements Microsoft's recommended Foundry RBAC model (learn.microsoft.com/azure/ai-foundry/concepts/rbac-azure-ai-foundry). Service-to-service grants are AUTO-CREATED whenever the relevant component is deployed — no input required. Human grants below are OPTIONAL and gated by the toggle."
+            }
+          },
+          {
+            "name": "rbacAutoCreatedInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Auto-created service-to-service RBAC (no input needed): • APIM managed identity → Foundry: Cognitive Services User + Cognitive Services OpenAI User (chat completions, embeddings, content safety) • Foundry account managed identity → AI Search: Search Index Data Reader (grounding) • Each Foundry project managed identity → Foundry User on parent account + Search Index Data Reader • JumpVM + BuildVM managed identities → Key Vault Secrets User. NOT auto-created today: AppGW → KV cert pull (needs UAMI feature), workload containers → Foundry (per-app MI). For those use scripts/grant-runtime-rbac.ps1 post-deploy."
             }
           },
           {
             "name": "enablePostDeployRbac",
             "type": "Microsoft.Common.CheckBox",
-            "label": "Enable post-deploy RBAC assignments",
+            "label": "Assign human RBAC roles below",
             "defaultValue": false,
-            "toolTip": "Master switch. When OFF, no role assignments are emitted regardless of the object IDs below."
+            "toolTip": "Master switch for human role assignments. When OFF, the auto-created service-to-service grants above still happen — only the group/SPN inputs below are skipped."
           },
           {
             "name": "rbacFindIdsHint",
@@ -934,7 +943,7 @@
             "visible": "[steps('rbac').enablePostDeployRbac]",
             "options": {
               "icon": "Info",
-              "text": "Find object IDs in Entra: Groups → <group> → Object ID, or SPN → Enterprise Applications → <app> → Object ID. CLI: az ad group show --group <name> --query id -o tsv  •  az ad sp show --id <appId> --query id -o tsv"
+              "text": "Find object IDs in Entra: Groups → <group> → Object ID, or SPN → Enterprise Applications → <app> → Object ID. CLI: az ad group show --group <name> --query id -o tsv  •  az ad sp show --id <appId> --query id -o tsv. Every field is optional — leave blank to skip that one assignment."
             }
           },
           {
@@ -979,9 +988,22 @@
           {
             "name": "platformReaderGroupObjectId",
             "type": "Microsoft.Common.TextBox",
-            "label": "Reader group (object ID)",
+            "label": "Platform RG Reader group (object ID)",
             "defaultValue": "",
-            "toolTip": "Entra group that gets Reader on the Foundry account AND on the platform resource group — auditors, SREs, anyone who needs read-only visibility.",
+            "toolTip": "Entra group that gets Reader on the PLATFORM resource group only — SREs and FinOps people who need to see infra metrics, logs, and resources but not Foundry data. If you leave the Foundry Reader field below blank, this group is also reused as the Foundry Reader for backward compatibility.",
+            "visible": "[steps('rbac').enablePostDeployRbac]",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Leave blank or paste a valid Entra group object ID (GUID)."
+            }
+          },
+          {
+            "name": "foundryReaderGroupObjectId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Foundry Reader group (object ID)  —  optional",
+            "defaultValue": "",
+            "toolTip": "Entra group that gets Reader on the FOUNDRY account only — auditors and read-only data scientists who need Foundry visibility but not platform RG access. Leave blank to reuse the Platform RG Reader group above (default behavior).",
             "visible": "[steps('rbac').enablePostDeployRbac]",
             "constraints": {
               "required": false,
@@ -1100,6 +1122,7 @@
       "foundryLeadGroupObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryLeadGroupObjectId, '')]",
       "foundryDeveloperGroupObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryDeveloperGroupObjectId, '')]",
       "platformReaderGroupObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').platformReaderGroupObjectId, '')]",
+      "foundryReaderGroupObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').foundryReaderGroupObjectId, '')]",
       "deploymentSpnObjectId": "[if(coalesce(steps('rbac').enablePostDeployRbac, false), steps('rbac').deploymentSpnObjectId, '')]"
     }
   }

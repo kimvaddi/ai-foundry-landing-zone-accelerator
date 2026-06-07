@@ -214,8 +214,11 @@ param foundryLeadGroupObjectId string = ''
 @description('Entra group object ID -> Foundry User on the Foundry account (developers who build agents and call models). Leave empty to skip.')
 param foundryDeveloperGroupObjectId string = ''
 
-@description('Entra group object ID -> Reader on the Foundry account AND on the platform RG (auditors / SREs). Leave empty to skip.')
+@description('Entra group object ID -> Reader on the platform RG (auditors / SREs / FinOps). Leave empty to skip.')
 param platformReaderGroupObjectId string = ''
+
+@description('Entra group object ID -> Reader on the Foundry account (Foundry-only auditors / read-only data scientists). Leave empty to skip. If omitted but platformReaderGroupObjectId is set, the platform reader group is reused for Foundry Reader for backward compatibility.')
+param foundryReaderGroupObjectId string = ''
 
 @description('Service principal object ID -> Contributor on the platform RG (CI/CD pipelines that deploy workloads). Leave empty to skip.')
 param deploymentSpnObjectId string = ''
@@ -771,7 +774,7 @@ module postRbacFoundry 'modules/security/rbac-foundry-scope.bicep' = if (enableP
     foundryAdminGroupObjectId: foundryAdminGroupObjectId
     foundryLeadGroupObjectId: foundryLeadGroupObjectId
     foundryDeveloperGroupObjectId: foundryDeveloperGroupObjectId
-    foundryReaderGroupObjectId: platformReaderGroupObjectId
+    foundryReaderGroupObjectId: empty(foundryReaderGroupObjectId) ? platformReaderGroupObjectId : foundryReaderGroupObjectId
     foundryAccountPrincipalId: foundry.outputs.principalId
     projectPrincipalIds: foundry.outputs.projectPrincipalIds
   }
