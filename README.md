@@ -6,9 +6,72 @@
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2FcreateUiDefinition.json)
 [![Deploy to Azure Gov](https://aka.ms/deploytoazuregovbutton)](https://portal.azure.us/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2FcreateUiDefinition.json)
-[![Visualize](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/visualizebutton.svg?sanitize=true)](http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2Fkimvaddi%2Fai-foundry-landing-zone-accelerator%2Fmain%2Fdeploy%2Fazuredeploy.json)
+[📐 **See architecture →**](#what-youre-deploying)
 
 > **Click-to-deploy via the Azure Portal.** The button opens a guided wizard with a blueprint picker (`smoke` / `poc-*` / `prod-*`), conditional tabs for hub VNet IDs (only shown when you pick a `hub-connected` blueprint), and per-blueprint defaults for compute, APIM, and safety toggles. Requires `Contributor` on a subscription. See [`deploy/`](deploy/) for the underlying ARM + UI artifacts.
+>
+> ℹ️ The Portal's built-in **"Visualize Deployment"** button on the Review tab will appear empty for this template — that's a documented `armviz` limitation when ARM templates use nested/linked deployments (which we do, because everything is built on Azure Verified Modules). Use the diagram below instead.
+
+## What you're deploying
+
+```mermaid
+flowchart LR
+  Client([👤 Client / Agent app])
+
+  subgraph Sub["Your Azure Subscription · 5 resource groups · rg-klzfin-*-{env}"]
+    direction TB
+    AppGW["🛡️ App Gateway WAF v2<br/>(optional)"]
+    APIM["<b>🚪 APIM AI Gateway</b><br/>token-limit · semantic cache<br/>content safety · prompt shields<br/>emit-token-metric (6 dims)"]
+
+    subgraph DataPlane[" "]
+      direction LR
+      AOAI["🧠 Foundry / Azure OpenAI<br/>publicNetworkAccess=Disabled<br/>+ projects + model deployments"]
+      Search["🔍 AI Search<br/>publicNetworkAccess=Disabled"]
+      Redis[("💾 Redis Enterprise<br/>semantic cache")]
+    end
+
+    subgraph Obs[" "]
+      direction LR
+      LAW[("📊 Log Analytics<br/>+ FinOps custom tables")]
+      AI["📈 App Insights"]
+      WB["📑 Workbooks<br/>showback · compliance · safety"]
+      Bud["💰 Budgets +<br/>auto-suspend Logic App"]
+    end
+  end
+
+  Hub[["Optional ALZ Hub<br/>peering + UDR<br/>(hub-connected blueprints)"]]
+
+  Client ==>|HTTPS| AppGW
+  AppGW ==> APIM
+  Client ==>|HTTPS, direct| APIM
+  APIM ==>|managed identity<br/>via private endpoint| AOAI
+  APIM ==>|managed identity<br/>via private endpoint| Search
+  APIM <-.cache lookup.-> Redis
+  APIM -.token metrics.-> AI
+  APIM -.chargeback logs.-> LAW
+  AOAI -.diagnostics.-> LAW
+  Search -.diagnostics.-> LAW
+  LAW --> WB
+  Bud -.threshold breach.-> APIM
+  AOAI <-.spoke peering.-> Hub
+
+  classDef chokepoint fill:#fff4ce,stroke:#d97706,stroke-width:3px,color:#92400e
+  classDef privnet fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  class APIM chokepoint
+  class AOAI,Search privnet
+```
+
+| Resource group | Holds | Why |
+|---|---|---|
+| `rg-klzfin-foundation-{env}` | Log Analytics, App Insights, Key Vault | Shared observability + secrets — referenced by everything |
+| `rg-klzfin-network-{env}` | Spoke VNet `10.50.0.0/20` (9 subnets), NSGs, 21 private DNS zones | Network plane lives here so it can be owned by net team |
+| `rg-klzfin-foundry-{env}` | Foundry account, projects, model deployments, AI Search, private endpoints, agent CAE | Data plane — `publicNetworkAccess=Disabled` on `prod-*`; only reachable via APIM chokepoint |
+| `rg-klzfin-platform-{env}` | APIM AI Gateway, App Gateway + WAF, Redis Enterprise (semantic cache), Bastion, JumpVM, BuildVM | The chokepoint + jump/build infra |
+| `rg-klzfin-finops-{env}` | Budgets, workbooks, action groups, auto-suspend Logic App | FinOps controls — owned by FinOps team |
+
+**The architectural story in one line:** clients hit App Gateway → APIM AI Gateway → Foundry / Search **only via private endpoints with managed identity** — APIM is the single chokepoint where token limits, semantic caching, content safety, and emit-token-metric chargeback all happen.
+
+For request lifecycle, subnet maps, hub-connected dataflow, and sequence diagrams, see **[docs/architecture.md](docs/architecture.md)**.
 
 This repository ships an **opinionated, enterprise-grade landing zone** for hosting Microsoft Foundry (the Azure AI Foundry / Cognitive Services unified service) inside an Azure subscription. It is designed to be **deployed as-is for a smoke test in under 10 minutes**, or **adopted into an existing ALZ-style hub-and-spoke topology** with a parameter flip — no template rewriting.
 
@@ -20,6 +83,7 @@ Both **Bicep** and **Terraform** are first-class — they ship the same architec
 
 - [What is this?](#what-is-this)
 - [When should I use this?](#when-should-i-use-this)
+- [What you're deploying](#what-youre-deploying)
 - [Architecture at a glance](#architecture-at-a-glance)
 - [What gets deployed](#what-gets-deployed)
 - [Identity & RBAC](#identity--rbac)
