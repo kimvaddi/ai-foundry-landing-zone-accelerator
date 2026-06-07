@@ -420,7 +420,8 @@
     "apimSku": "[if(and(contains(parameters('components'), 'apim'), contains(parameters('components').apim, 'sku')), parameters('components').apim.sku, 'StandardV2')]",
     "apimWantsVnet": "[and(parameters('components').apim.deploy, not(equals(variables('apimNetworkMode'), 'none')))]",
     "apimPipNameAuto": "[format('pip-apim-{0}', variables('nameSuffix'))]",
-    "deployCae": "[or(parameters('components').containerAppsEnv.deploy, parameters('components').otelCollector.deploy)]"
+    "deployCae": "[or(parameters('components').containerAppsEnv.deploy, parameters('components').otelCollector.deploy)]",
+    "modelDeploymentsNested": "[map(parameters('modelDeployments'), lambda('m', if(contains(lambdaVariables('m'), 'model'), lambdaVariables('m'), createObject('name', lambdaVariables('m').name, 'model', createObject('format', 'OpenAI', 'name', lambdaVariables('m').modelName, 'version', string(lambdaVariables('m').modelVersion)), 'sku', createObject('name', lambdaVariables('m').skuName, 'capacity', int(lambdaVariables('m').capacity))))))]"
   },
   "resources": {
     "rgPlatform": {
@@ -7521,7 +7522,7 @@
             "value": "[reference('law').outputs.workspaceResourceId.value]"
           },
           "modelDeployments": {
-            "value": "[parameters('modelDeployments')]"
+            "value": "[variables('modelDeploymentsNested')]"
           },
           "projects": {
             "value": "[parameters('foundryProjects')]"

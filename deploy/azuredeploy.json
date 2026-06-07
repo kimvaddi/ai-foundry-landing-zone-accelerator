@@ -182,19 +182,14 @@
       "defaultValue": [
         {
           "name": "gpt-4o-mini",
-          "model": {
-            "format": "OpenAI",
-            "name": "gpt-4o-mini",
-            "version": "2024-07-18"
-          },
-          "sku": {
-            "name": "GlobalStandard",
-            "capacity": 10
-          }
+          "modelName": "gpt-4o-mini",
+          "modelVersion": "2024-07-18",
+          "skuName": "GlobalStandard",
+          "capacity": "10"
         }
       ],
       "metadata": {
-        "description": "Models to deploy on the Foundry account."
+        "description": "Models to deploy on the Foundry account. Accepts either the FLAT shape from the Deploy-to-Azure wizard ({ name, modelName, modelVersion, skuName, capacity }) OR the legacy NESTED shape ({ name, model:{format,name,version}, sku:{name,capacity} }) — the wrapper auto-projects per row before forwarding to azuredeploy-full.json."
       }
     },
     "foundryProjects": {

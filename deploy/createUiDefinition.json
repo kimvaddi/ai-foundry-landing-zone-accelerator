@@ -620,7 +620,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "These are passed as JSON arrays directly to the template. Edit in place — the defaults reflect the selected blueprint."
+              "text": "Edit the rows below. Defaults reflect the blueprint you picked on tab 1. Add or delete rows with the toolbar. If you need a model that isn't in the dropdown, use the Bicep or Terraform stack directly."
             }
           },
           {
@@ -628,34 +628,236 @@
             "type": "Microsoft.Common.InfoBox",
             "visible": "[and(coalesce(steps('components').apimDeploy, false), coalesce(steps('apim').enableSemanticCache, false))]",
             "options": {
-              "icon": "Info",
-              "text": "Because you enabled APIM semantic cache, the embedding model you picked on the APIM tab has been auto-added to the Model deployments JSON below. If you switched to Custom, you must add your own entry with the matching name."
+              "icon": "Warning",
+              "text": "APIM semantic cache is enabled, so the embedding model picked on the APIM tab has been added as a row in the Model deployments grid below. The APIM gateway will fail to start the cache if that row's 'Deployment name' is renamed or deleted. Keep the row, or pick 'Custom' on the APIM tab and manage the row yourself."
             }
           },
           {
             "name": "modelDeployments",
-            "type": "Microsoft.Common.TextBox",
-            "label": "Model deployments (JSON array)",
-            "multiLine": true,
-            "defaultValue": "[concat('[', if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '{\"name\":\"gpt-4o\",\"model\":{\"format\":\"OpenAI\",\"name\":\"gpt-4o\",\"version\":\"2024-11-20\"},\"sku\":{\"name\":\"GlobalStandard\",\"capacity\":50}}', '{\"name\":\"gpt-4o-mini\",\"model\":{\"format\":\"OpenAI\",\"name\":\"gpt-4o-mini\",\"version\":\"2024-07-18\"},\"sku\":{\"name\":\"GlobalStandard\",\"capacity\":10}}'), if(and(coalesce(steps('components').apimDeploy, false), coalesce(steps('apim').enableSemanticCache, false), not(equals(coalesce(steps('apim').embeddingsModel, ''), '_custom'))), if(equals(coalesce(steps('apim').embeddingsModel, ''), 'text-embedding-3-small'), ',{\"name\":\"text-embedding-3-small\",\"model\":{\"format\":\"OpenAI\",\"name\":\"text-embedding-3-small\",\"version\":\"1\"},\"sku\":{\"name\":\"Standard\",\"capacity\":10}}', if(equals(coalesce(steps('apim').embeddingsModel, ''), 'text-embedding-3-large'), ',{\"name\":\"text-embedding-3-large\",\"model\":{\"format\":\"OpenAI\",\"name\":\"text-embedding-3-large\",\"version\":\"1\"},\"sku\":{\"name\":\"Standard\",\"capacity\":10}}', if(equals(coalesce(steps('apim').embeddingsModel, ''), 'text-embedding-ada-002'), ',{\"name\":\"text-embedding-ada-002\",\"model\":{\"format\":\"OpenAI\",\"name\":\"text-embedding-ada-002\",\"version\":\"2\"},\"sku\":{\"name\":\"Standard\",\"capacity\":10}}', ''))), ''), ']')]",
-            "toolTip": "Array of { name, model:{format,name,version}, sku:{name,capacity} } objects.",
+            "type": "Microsoft.Common.EditableGrid",
+            "ariaLabel": "Edit Azure OpenAI / Foundry model deployments",
+            "label": "Model deployments",
+            "defaultValue": "[parse(concat('[', if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '{\"name\":\"gpt-4o\",\"modelName\":\"gpt-4o\",\"modelVersion\":\"2024-11-20\",\"skuName\":\"GlobalStandard\",\"capacity\":\"50\"}', '{\"name\":\"gpt-4o-mini\",\"modelName\":\"gpt-4o-mini\",\"modelVersion\":\"2024-07-18\",\"skuName\":\"GlobalStandard\",\"capacity\":\"10\"}'), if(and(coalesce(steps('components').apimDeploy, false), coalesce(steps('apim').enableSemanticCache, false), not(equals(coalesce(steps('apim').embeddingsModel, ''), '_custom'))), concat(',', if(equals(steps('apim').embeddingsModel, 'text-embedding-3-small'), '{\"name\":\"text-embedding-3-small\",\"modelName\":\"text-embedding-3-small\",\"modelVersion\":\"1\",\"skuName\":\"Standard\",\"capacity\":\"10\"}', if(equals(steps('apim').embeddingsModel, 'text-embedding-3-large'), '{\"name\":\"text-embedding-3-large\",\"modelName\":\"text-embedding-3-large\",\"modelVersion\":\"1\",\"skuName\":\"Standard\",\"capacity\":\"10\"}', if(equals(steps('apim').embeddingsModel, 'text-embedding-ada-002'), '{\"name\":\"text-embedding-ada-002\",\"modelName\":\"text-embedding-ada-002\",\"modelVersion\":\"2\",\"skuName\":\"Standard\",\"capacity\":\"10\"}', '')))), ''), ']'))]",
             "constraints": {
-              "required": true,
-              "regex": "^\\s*\\[.*\\]\\s*$",
-              "validationMessage": "Must be a JSON array."
+              "width": "Full",
+              "rows": {
+                "count": {
+                  "min": 1,
+                  "max": 20
+                }
+              },
+              "columns": [
+                {
+                  "id": "name",
+                  "header": "Deployment name",
+                  "width": "1.4fr",
+                  "element": {
+                    "type": "Microsoft.Common.TextBox",
+                    "placeholder": "e.g. gpt-4o",
+                    "constraints": {
+                      "required": true,
+                      "validations": [
+                        {
+                          "regex": "^[a-zA-Z][a-zA-Z0-9._-]{1,63}$",
+                          "message": "Letters, digits, '.', '_', '-'; must start with a letter; 2-64 chars."
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "modelName",
+                  "header": "Model",
+                  "width": "1.6fr",
+                  "element": {
+                    "type": "Microsoft.Common.DropDown",
+                    "placeholder": "Select a model",
+                    "constraints": {
+                      "required": true,
+                      "allowedValues": [
+                        {
+                          "label": "gpt-4o (chat, vision)",
+                          "value": "gpt-4o"
+                        },
+                        {
+                          "label": "gpt-4o-mini (cheap chat)",
+                          "value": "gpt-4o-mini"
+                        },
+                        {
+                          "label": "gpt-4.1 (large context)",
+                          "value": "gpt-4.1"
+                        },
+                        {
+                          "label": "gpt-4.1-mini",
+                          "value": "gpt-4.1-mini"
+                        },
+                        {
+                          "label": "o4-mini (reasoning)",
+                          "value": "o4-mini"
+                        },
+                        {
+                          "label": "o3-mini (reasoning)",
+                          "value": "o3-mini"
+                        },
+                        {
+                          "label": "text-embedding-3-small (cheap embeddings)",
+                          "value": "text-embedding-3-small"
+                        },
+                        {
+                          "label": "text-embedding-3-large (higher recall)",
+                          "value": "text-embedding-3-large"
+                        },
+                        {
+                          "label": "text-embedding-ada-002 (legacy)",
+                          "value": "text-embedding-ada-002"
+                        },
+                        {
+                          "label": "whisper (speech-to-text)",
+                          "value": "whisper"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "modelVersion",
+                  "header": "Version",
+                  "width": "1fr",
+                  "element": {
+                    "type": "Microsoft.Common.TextBox",
+                    "placeholder": "e.g. 2024-11-20 or 1",
+                    "constraints": {
+                      "required": true,
+                      "validations": [
+                        {
+                          "regex": "^[A-Za-z0-9._-]{1,32}$",
+                          "message": "Up to 32 chars; letters/digits/dot/dash/underscore."
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "skuName",
+                  "header": "SKU",
+                  "width": "1.4fr",
+                  "element": {
+                    "type": "Microsoft.Common.DropDown",
+                    "placeholder": "Select SKU",
+                    "constraints": {
+                      "required": true,
+                      "allowedValues": [
+                        {
+                          "label": "GlobalStandard (default — global pool)",
+                          "value": "GlobalStandard"
+                        },
+                        {
+                          "label": "Standard (regional, default for embeddings)",
+                          "value": "Standard"
+                        },
+                        {
+                          "label": "DataZoneStandard (in-region data residency)",
+                          "value": "DataZoneStandard"
+                        },
+                        {
+                          "label": "ProvisionedManaged (PTU)",
+                          "value": "ProvisionedManaged"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "capacity",
+                  "header": "Capacity (TPM ÷ 1000)",
+                  "width": "0.8fr",
+                  "element": {
+                    "type": "Microsoft.Common.TextBox",
+                    "placeholder": "10",
+                    "constraints": {
+                      "required": true,
+                      "validations": [
+                        {
+                          "regex": "^[1-9][0-9]{0,3}$",
+                          "message": "Integer 1-9999."
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
             }
           },
           {
             "name": "foundryProjects",
-            "type": "Microsoft.Common.TextBox",
-            "label": "Foundry projects (JSON array)",
-            "multiLine": true,
-            "defaultValue": "[if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '[{\"name\":\"platform\",\"displayName\":\"Platform team\",\"description\":\"Foundry workspace for the central AI platform team.\"},{\"name\":\"business-unit-a\",\"displayName\":\"Business unit A\",\"description\":\"Isolated workspace for BU-A apps and agents.\"}]', '[{\"name\":\"default\",\"displayName\":\"Default project\",\"description\":\"Foundry project.\"}]')]",
-            "toolTip": "Array of { name, displayName, description } objects.",
+            "type": "Microsoft.Common.EditableGrid",
+            "ariaLabel": "Edit Foundry projects",
+            "label": "Foundry projects",
+            "defaultValue": "[parse(if(startsWith(steps('blueprint').blueprintPicker, 'prod-'), '[{\"name\":\"platform\",\"displayName\":\"Platform team\",\"description\":\"Foundry workspace for the central AI platform team.\"},{\"name\":\"business-unit-a\",\"displayName\":\"Business unit A\",\"description\":\"Isolated workspace for BU-A apps and agents.\"}]', '[{\"name\":\"default\",\"displayName\":\"Default project\",\"description\":\"Foundry project.\"}]'))]",
             "constraints": {
-              "required": true,
-              "regex": "^\\s*\\[.*\\]\\s*$",
-              "validationMessage": "Must be a JSON array."
+              "width": "Full",
+              "rows": {
+                "count": {
+                  "min": 1,
+                  "max": 10
+                }
+              },
+              "columns": [
+                {
+                  "id": "name",
+                  "header": "Project name (slug)",
+                  "width": "1fr",
+                  "element": {
+                    "type": "Microsoft.Common.TextBox",
+                    "placeholder": "e.g. business-unit-a",
+                    "constraints": {
+                      "required": true,
+                      "validations": [
+                        {
+                          "regex": "^[a-z][a-z0-9-]{1,31}$",
+                          "message": "Lowercase letters, digits, hyphens; must start with a letter; 2-32 chars."
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "displayName",
+                  "header": "Display name",
+                  "width": "1.4fr",
+                  "element": {
+                    "type": "Microsoft.Common.TextBox",
+                    "placeholder": "e.g. Business unit A",
+                    "constraints": {
+                      "required": true,
+                      "validations": [
+                        {
+                          "regex": "^.{1,64}$",
+                          "message": "1-64 characters."
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "description",
+                  "header": "Description",
+                  "width": "2fr",
+                  "element": {
+                    "type": "Microsoft.Common.TextBox",
+                    "placeholder": "Short description (required so the JSON always has the key).",
+                    "constraints": {
+                      "required": true,
+                      "validations": [
+                        {
+                          "regex": "^.{1,256}$",
+                          "message": "1-256 characters."
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
             }
           }
         ]
@@ -875,8 +1077,8 @@
       "createFoundryCapabilityHost": "[and(steps('components').enableFoundryAgentInjection, coalesce(steps('components').createFoundryCapabilityHost, false))]",
       "foundryByorConnections": [],
       "autoWireSearchConnection": true,
-      "modelDeployments": "[parse(steps('modelsAndProjects').modelDeployments)]",
-      "foundryProjects": "[parse(steps('modelsAndProjects').foundryProjects)]",
+      "modelDeployments": "[steps('modelsAndProjects').modelDeployments]",
+      "foundryProjects": "[steps('modelsAndProjects').foundryProjects]",
       "apimPublisherLocalPart": "[if(steps('components').apimDeploy, steps('apim').apimPublisherLocalPart, 'platform')]",
       "apimPublisherDomain": "[if(steps('components').apimDeploy, steps('apim').apimPublisherDomain, 'example.com')]",
       "apimPublisherName": "[if(steps('components').apimDeploy, steps('apim').apimPublisherName, 'AI Platform')]",
