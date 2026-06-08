@@ -80,53 +80,54 @@ variable "vnet_address_space" {
   description = "Spoke VNet CIDR (must fit 9 subnets; /20 leaves growth room)."
 }
 
-# tflint-ignore: terraform_unused_declarations
-# Reserved for P9 hub-connected wiring (see docs/lint-baseline.md).
+# Used when network_mode = hub-connected; consumed by module.hub_peering.
 variable "hub_vnet_resource_id" {
   type        = string
   default     = ""
   description = <<-EOT
     Resource ID of an existing hub VNet (only used when network_mode = hub-connected).
 
-    NOTE: declared for Bicep parity. P9 carryover work will wire this into
-    modules/spoke-network for the hub-connected blueprints. Until then, set
-    network_mode = hub-greenfield for end-to-end hub deploys.
+    When set with network_mode = hub-connected, module.hub_peering creates the
+    spoke->hub VNet peering. Pair with var.create_reverse_hub_peer = true to
+    create the reverse hub->spoke peer (same subscription only).
   EOT
 }
 
-# tflint-ignore: terraform_unused_declarations
-# Reserved for P9 hub-connected wiring (see docs/lint-baseline.md).
+# Used when network_mode = hub-connected AND enable_forced_tunneling = true; consumed by module.route_table.
 variable "hub_firewall_private_ip" {
   type        = string
   default     = ""
   description = <<-EOT
     Private IP of the existing hub firewall (only used when network_mode = hub-connected and UDRs are enabled).
 
-    NOTE: declared for Bicep parity. P9 carryover work (see lint-baseline.md).
+    Becomes the VirtualAppliance next-hop on the 0.0.0.0/0 forced-tunnel route
+    attached to AIFoundrySubnet + each toggle-gated workload subnet.
   EOT
 }
 
-# tflint-ignore: terraform_unused_declarations
-# Reserved for P9 hub-connected wiring (see docs/lint-baseline.md).
+# Used when network_mode = hub-connected; consumed by module.route_table.
 variable "enable_forced_tunneling" {
   type        = bool
   default     = true
   description = <<-EOT
     When true and network_mode = hub-connected, install UDRs that route 0.0.0.0/0 to var.hub_firewall_private_ip.
 
-    NOTE: declared for Bicep parity. P9 carryover work (see lint-baseline.md).
+    Per-subnet attach rules mirror Bicep main.bicep:udrCandidateSubnets:
+    always AIFoundrySubnet; toggle-gated APIMSubnet, AppGatewaySubnet,
+    ContainerAppEnvironmentSubnet, DevOpsBuildSubnet, JumpboxSubnet; never
+    PrivateEndpointSubnet, AzureBastionSubnet, AzureFirewallSubnet.
   EOT
 }
 
-# tflint-ignore: terraform_unused_declarations
-# Reserved for P9 hub-connected wiring (see docs/lint-baseline.md).
+# Used when network_mode = hub-connected; consumed by module.hub_peering.
 variable "create_reverse_hub_peer" {
   type        = bool
   default     = false
   description = <<-EOT
     When true and network_mode = hub-connected, create the hub-side peering back to the spoke (requires Network Contributor on hub).
 
-    NOTE: declared for Bicep parity. P9 carryover work (see lint-baseline.md).
+    Only honored when the hub VNet is in the SAME subscription as the spoke
+    (parity with Bicep — cross-sub reverse peer is deferred).
   EOT
 }
 

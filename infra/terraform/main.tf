@@ -74,6 +74,41 @@ module "private_dns" {
   tags                       = local.tags
 }
 
+# Hub peering — spoke->hub (always) + optional hub->spoke reverse peer.
+# Mirrors Bicep main.bicep:hubPeering. Only deploys when network_mode = hub-connected
+# AND a hub VNet resource ID is supplied. Cross-sub reverse peer is silently skipped
+# (parity with Bicep; needs nested deployments to land at the hub scope).
+module "hub_peering" {
+  count                        = local.hub_peering_enabled ? 1 : 0
+  source                       = "./modules/hub-peering"
+  spoke_vnet_name              = module.spoke_network.vnet_name
+  spoke_resource_group_name    = azurerm_resource_group.platform.name
+  spoke_vnet_id                = module.spoke_network.vnet_id
+  hub_vnet_resource_id         = var.hub_vnet_resource_id
+  peer_name_suffix             = "hub"
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+  use_remote_gateways          = false
+  create_reverse_hub_peer      = var.create_reverse_hub_peer
+}
+
+# Forced-tunnel UDR (0.0.0.0/0 -> hub firewall NVA) + per-subnet attachment.
+# Mirrors Bicep main.bicep:routeTable + udrAttach loop. Only deploys when
+# hub-connected, forced tunneling enabled, and a hub FW IP is provided.
+module "route_table" {
+  count                   = local.udr_should_deploy ? 1 : 0
+  source                  = "./modules/route-table"
+  base_name               = local.base_name
+  location                = var.location
+  resource_group_name     = azurerm_resource_group.platform.name
+  hub_firewall_private_ip = var.hub_firewall_private_ip
+  subnet_ids = {
+    for k in local.udr_candidate_subnet_keys :
+    k => module.spoke_network.subnet_ids[k]
+  }
+  tags = local.tags
+}
+
 # Hub greenfield (only when network_mode = hub-greenfield)
 module "hub_greenfield" {
   count               = local.is_hub_greenfield ? 1 : 0

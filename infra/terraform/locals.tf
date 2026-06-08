@@ -64,6 +64,23 @@ locals {
       }
     )
   ]
+
+  # ----- Hub-connected gates (mirror Bicep main.bicep:hubPeering + udrShouldDeploy) -----
+  hub_peering_enabled = local.is_hub_connected && var.hub_vnet_resource_id != ""
+  udr_should_deploy   = local.is_hub_connected && var.enable_forced_tunneling && var.hub_firewall_private_ip != ""
+
+  # UDR-attachable subnet list — mirrors Bicep `udrCandidateSubnets`.
+  # Always AIFoundrySubnet; toggle-gated APIMSubnet / AppGatewaySubnet /
+  # ContainerAppEnvironmentSubnet / DevOpsBuildSubnet / JumpboxSubnet.
+  # Never PrivateEndpointSubnet, AzureBastionSubnet, AzureFirewallSubnet.
+  udr_candidate_subnet_keys = compact(concat(
+    ["AIFoundrySubnet"],
+    local.apim_wants_subnet ? ["APIMSubnet"] : [],
+    coalesce(try(local.c.app_gateway.deploy, false), false) ? ["AppGatewaySubnet"] : [],
+    coalesce(try(local.c.container_apps_env.deploy, false), false) ? ["ContainerAppEnvironmentSubnet"] : [],
+    coalesce(try(local.c.buildvm.deploy, false), false) ? ["DevOpsBuildSubnet"] : [],
+    coalesce(try(local.c.jumpvm.deploy, false), false) ? ["JumpboxSubnet"] : [],
+  ))
 }
 
 data "azurerm_client_config" "current" {}
