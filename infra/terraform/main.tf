@@ -349,3 +349,36 @@ module "finops" {
   workspace_name        = module.foundation.workspace_name
   tags                  = local.tags
 }
+
+###############################################################################
+# Post-deploy RBAC (opt-in) — mirrors Bicep main.bicep postRbacFoundry +
+# postRbacPlatform. Each sub-module gates individual role assignments with
+# empty-string checks on principal IDs, so partial configurations are valid.
+#
+# For backward compatibility with Bicep: when foundry_reader_group_object_id
+# is empty, the platform reader group is reused for Foundry Reader.
+###############################################################################
+
+module "rbac_foundry" {
+  count                             = var.enable_post_deploy_rbac ? 1 : 0
+  source                            = "./modules/rbac-foundry-scope"
+  foundry_account_id                = module.foundry_stack.account_id
+  search_service_id                 = length(module.search) > 0 ? module.search[0].id : ""
+  foundry_admin_group_object_id     = var.foundry_admin_group_object_id
+  foundry_lead_group_object_id      = var.foundry_lead_group_object_id
+  foundry_developer_group_object_id = var.foundry_developer_group_object_id
+  foundry_reader_group_object_id    = var.foundry_reader_group_object_id != "" ? var.foundry_reader_group_object_id : var.platform_reader_group_object_id
+  foundry_account_principal_id      = coalesce(module.foundry_stack.account_principal_id, "")
+  project_principal_ids             = module.foundry_stack.project_principal_ids
+}
+
+module "rbac_platform" {
+  count                           = var.enable_post_deploy_rbac ? 1 : 0
+  source                          = "./modules/rbac-platform-scope"
+  resource_group_id               = azurerm_resource_group.platform.id
+  key_vault_id                    = module.foundation.key_vault_id
+  platform_reader_group_object_id = var.platform_reader_group_object_id
+  deployment_spn_object_id        = var.deployment_spn_object_id
+  jump_vm_principal_id            = length(module.jumpvm) > 0 ? module.jumpvm[0].principal_id : ""
+  build_vm_principal_id           = length(module.buildvm) > 0 ? module.buildvm[0].principal_id : ""
+}

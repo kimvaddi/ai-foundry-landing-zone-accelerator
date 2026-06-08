@@ -405,6 +405,52 @@ variable "apim_product_tokens_per_minute" {
 }
 
 ###############################################################################
+# Post-deploy RBAC (opt-in) — mirrors Bicep modules/security/rbac-*-scope.bicep
+###############################################################################
+
+variable "enable_post_deploy_rbac" {
+  type        = bool
+  default     = false
+  description = "Master switch for the post-deploy RBAC modules. When false (default), no role assignments are emitted regardless of the object IDs below."
+}
+
+variable "foundry_admin_group_object_id" {
+  type        = string
+  default     = ""
+  description = "Entra group object ID -> Foundry Owner on the Foundry account. Highly privileged. Leave empty to skip."
+}
+
+variable "foundry_lead_group_object_id" {
+  type        = string
+  default     = ""
+  description = "Entra group object ID -> Foundry Project Manager on the Foundry account (team leads who publish agents and create projects). Leave empty to skip."
+}
+
+variable "foundry_developer_group_object_id" {
+  type        = string
+  default     = ""
+  description = "Entra group object ID -> Foundry User on the Foundry account (developers who build agents and call models). Leave empty to skip."
+}
+
+variable "platform_reader_group_object_id" {
+  type        = string
+  default     = ""
+  description = "Entra group object ID -> Reader on the platform RG (auditors / SREs / FinOps). Leave empty to skip."
+}
+
+variable "foundry_reader_group_object_id" {
+  type        = string
+  default     = ""
+  description = "Entra group object ID -> Reader on the Foundry account. Leave empty to reuse var.platform_reader_group_object_id for backward compatibility with Bicep behavior."
+}
+
+variable "deployment_spn_object_id" {
+  type        = string
+  default     = ""
+  description = "Service principal object ID -> Contributor on the platform RG (CI/CD pipelines that deploy workloads). Leave empty to skip."
+}
+
+###############################################################################
 # Observability — alert toggles
 ###############################################################################
 

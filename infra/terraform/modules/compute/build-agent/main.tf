@@ -42,6 +42,11 @@ resource "azurerm_linux_virtual_machine" "build" {
   network_interface_ids = [azurerm_network_interface.build.id]
   tags                  = var.tags
 
+  # SystemAssigned MI for ACR/KV/Storage auth without secrets (parity with Bicep build-agent.bicep).
+  identity {
+    type = "SystemAssigned"
+  }
+
   admin_ssh_key {
     username   = var.admin_username
     public_key = var.ssh_public_key
@@ -64,3 +69,4 @@ resource "azurerm_linux_virtual_machine" "build" {
 output "id" { value = azurerm_linux_virtual_machine.build.id }
 output "name" { value = azurerm_linux_virtual_machine.build.name }
 output "private_ip" { value = azurerm_network_interface.build.private_ip_address }
+output "principal_id" { value = azurerm_linux_virtual_machine.build.identity[0].principal_id }

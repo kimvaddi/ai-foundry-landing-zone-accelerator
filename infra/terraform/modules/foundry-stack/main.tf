@@ -225,6 +225,24 @@ output "account_name" { value = local.account_name }
 output "account_endpoint" { value = "https://${local.account_name}.cognitiveservices.azure.com/" }
 output "project_ids" { value = local.all_project_ids }
 
+# Account system-assigned MI principal ID (used by post-deploy RBAC to grant Search Index Data Reader).
+# AVM ptn module doesn't expose this directly — fetch via azapi data source against the account.
+data "azapi_resource" "account_identity" {
+  type                   = "Microsoft.CognitiveServices/accounts@2025-06-01"
+  resource_id            = module.ptn.ai_foundry_id
+  response_export_values = ["identity.principalId"]
+}
+
+output "account_principal_id" {
+  value       = try(data.azapi_resource.account_identity.output.identity.principalId, null)
+  description = "Foundry account system-assigned MI principal ID. May be null if the account was provisioned without an identity."
+}
+
+output "project_principal_ids" {
+  value       = [for k, p in azapi_resource.extra_projects : try(p.output.identity.principalId, null) if try(p.output.identity.principalId, null) != null]
+  description = "List of Foundry project system-assigned MI principal IDs. Used by post-deploy RBAC to grant Foundry User + Search Index Data Reader."
+}
+
 # -----------------------------------------------------------------------------
 # Foundry account diagnostic setting — mirrors Bicep diagnosticSettings on
 # the account (RequestResponse audit + AllMetrics → LAW).

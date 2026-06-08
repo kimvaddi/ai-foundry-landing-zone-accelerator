@@ -46,6 +46,11 @@ resource "azurerm_windows_virtual_machine" "jump" {
   network_interface_ids = [azurerm_network_interface.jump.id]
   tags                  = var.tags
 
+  # SystemAssigned MI for KV/Storage auth without secrets (parity with Bicep jumpbox.bicep).
+  identity {
+    type = "SystemAssigned"
+  }
+
   os_disk {
     name                 = "osdisk-jump-${var.base_name}"
     caching              = "ReadWrite"
@@ -63,3 +68,4 @@ resource "azurerm_windows_virtual_machine" "jump" {
 output "id" { value = azurerm_windows_virtual_machine.jump.id }
 output "name" { value = azurerm_windows_virtual_machine.jump.name }
 output "private_ip" { value = azurerm_network_interface.jump.private_ip_address }
+output "principal_id" { value = azurerm_windows_virtual_machine.jump.identity[0].principal_id }
