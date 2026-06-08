@@ -257,52 +257,42 @@ variable "auto_wire_search_connection" {
 }
 
 # ----- Notifications -----
-# NOTE: declared for Bicep parity. P9 carryover work will pipe these into
-# modules/observability/notifications (see docs/lint-baseline.md).
+# NOTE: Wired into modules/notifications. Workflow ships in Disabled state
+# until enable_notifications_logic_app=true.
 
-# tflint-ignore: terraform_unused_declarations
-# P9 carryover: notifications module wiring not yet plumbed through main.tf.
 variable "deploy_notifications" {
   type        = bool
   default     = false
-  description = "Deploy the notifications module (Action Group + optional Logic App for Teams). P9 carryover."
+  description = "Deploy the notifications Logic App workflow (workflow ships in Disabled state unless enable_notifications_logic_app=true). Mirrors Bicep deployNotifications."
 }
 
-# tflint-ignore: terraform_unused_declarations
-# P9 carryover.
 variable "enable_notifications_logic_app" {
   type        = bool
   default     = false
-  description = "Enable the Logic App component of the notifications module. P9 carryover."
+  description = "When deploy_notifications=true, flip the Logic App workflow from Disabled to Enabled. Keep false in dev/PoC to avoid accidental webhook fires."
 }
 
-# tflint-ignore: terraform_unused_declarations
-# P9 carryover.
 variable "teams_webhook_url" {
   type        = string
   default     = ""
-  description = "Teams incoming webhook URL for notifications Logic App. P9 carryover."
+  description = "Teams Incoming Webhook URL consumed by the notifications Logic App. Stored as a SecureString workflow parameter."
   sensitive   = true
 }
 
-# tflint-ignore: terraform_unused_declarations
-# P9 carryover.
 variable "notification_emails" {
   type        = string
   default     = ""
-  description = "Comma-separated list of email addresses for the notifications Action Group. P9 carryover."
+  description = "Comma-separated email list reserved for future activation in the notifications Logic App workflow."
 }
 
 # ----- OTel collector -----
-# NOTE: declared for Bicep parity. P9 carryover work will pipe this into
-# modules/observability/otel-collector (see docs/lint-baseline.md).
+# NOTE: declared for Bicep parity. Wired into modules/otel-collector
+# (see docs/lint-baseline.md §parity).
 
-# tflint-ignore: terraform_unused_declarations
-# P9 carryover: otel-collector module wiring not yet plumbed through main.tf.
 variable "otel_secondary_endpoint" {
   type        = string
   default     = ""
-  description = "Optional secondary OTLP endpoint for the OTel collector to mirror traffic to (e.g. Datadog, Honeycomb). P9 carryover."
+  description = "Optional secondary OTLP gRPC endpoint for the OTel collector to forward traces/metrics to (e.g. Datadog, Honeycomb). Mirrors Bicep otelSecondaryEndpoint."
 }
 
 # ----- Compute creds -----

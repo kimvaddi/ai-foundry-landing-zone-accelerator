@@ -1,0 +1,154 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "teamsWebhookUrl": {
+      "type": "SecureString",
+      "defaultValue": ""
+    },
+    "serviceNowEndpoint": {
+      "type": "SecureString",
+      "defaultValue": ""
+    },
+    "notificationEmails": {
+      "type": "String",
+      "defaultValue": ""
+    }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "schemaId": { "type": "string" },
+            "data": {
+              "type": "object",
+              "properties": {
+                "essentials": {
+                  "type": "object",
+                  "properties": {
+                    "alertId": { "type": "string" },
+                    "alertRule": { "type": "string" },
+                    "severity": { "type": "string" },
+                    "signalType": { "type": "string" },
+                    "monitorCondition": { "type": "string" },
+                    "firedDateTime": { "type": "string" }
+                  }
+                },
+                "alertContext": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": {
+    "Check_Teams_Webhook": {
+      "type": "If",
+      "runAfter": {},
+      "expression": {
+        "and": [
+          {
+            "not": {
+              "equals": [
+                "@parameters('teamsWebhookUrl')",
+                ""
+              ]
+            }
+          }
+        ]
+      },
+      "actions": {
+        "Post_to_Teams": {
+          "type": "Http",
+          "runAfter": {},
+          "inputs": {
+            "method": "POST",
+            "uri": "@parameters('teamsWebhookUrl')",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "type": "message",
+              "attachments": [
+                {
+                  "contentType": "application/vnd.microsoft.card.adaptive",
+                  "content": {
+                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                    "type": "AdaptiveCard",
+                    "version": "1.5",
+                    "body": [
+                      {
+                        "type": "TextBlock",
+                        "size": "Large",
+                        "weight": "Bolder",
+                        "color": "Attention",
+                        "text": "@{concat('KLZ Alert: ', coalesce(triggerBody()?['data']?['essentials']?['alertRule'], 'unknown rule'))}",
+                        "wrap": true
+                      },
+                      {
+                        "type": "FactSet",
+                        "facts": [
+                          {
+                            "title": "Severity",
+                            "value": "@{coalesce(triggerBody()?['data']?['essentials']?['severity'], 'n/a')}"
+                          },
+                          {
+                            "title": "Condition",
+                            "value": "@{coalesce(triggerBody()?['data']?['essentials']?['monitorCondition'], 'n/a')}"
+                          },
+                          {
+                            "title": "Signal",
+                            "value": "@{coalesce(triggerBody()?['data']?['essentials']?['signalType'], 'n/a')}"
+                          },
+                          {
+                            "title": "Fired",
+                            "value": "@{coalesce(triggerBody()?['data']?['essentials']?['firedDateTime'], 'n/a')}"
+                          },
+                          {
+                            "title": "AlertId",
+                            "value": "@{coalesce(triggerBody()?['data']?['essentials']?['alertId'], 'n/a')}"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "actions": {}
+      }
+    },
+    "Respond_200": {
+      "type": "Response",
+      "runAfter": {
+        "Check_Teams_Webhook": [
+          "Succeeded",
+          "Failed",
+          "Skipped",
+          "TimedOut"
+        ]
+      },
+      "inputs": {
+        "statusCode": 200,
+        "body": {
+          "status": "accepted",
+          "teamsPosted": "@{if(equals(actions('Check_Teams_Webhook')?['status'], 'Succeeded'), 'true', 'false')}"
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

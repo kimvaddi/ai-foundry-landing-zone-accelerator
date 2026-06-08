@@ -61,3 +61,18 @@ output "name_suffix" {
   value       = local.name_suffix
   description = "Deterministic name suffix used for all resource names."
 }
+
+output "notification_workflow_id" {
+  value       = length(module.notifications) > 0 ? module.notifications[0].workflow_id : ""
+  description = "Resource ID of the notifications Logic App workflow (empty when deploy_notifications=false). Mirrors Bicep notificationWorkflowId."
+}
+
+output "notification_workflow_state" {
+  value       = length(module.notifications) > 0 ? module.notifications[0].workflow_state : "NotDeployed"
+  description = "Enabled / Disabled / NotDeployed. Mirrors Bicep notificationWorkflowState."
+}
+
+output "otel_collector_env_id" {
+  value       = local.deploy_cae ? module.container_apps_env[0].id : ""
+  description = "Container Apps Environment ID hosting the OTel collector. Mirrors Bicep otelCollectorEnvId."
+}

@@ -81,6 +81,14 @@ locals {
     coalesce(try(local.c.buildvm.deploy, false), false) ? ["DevOpsBuildSubnet"] : [],
     coalesce(try(local.c.jumpvm.deploy, false), false) ? ["JumpboxSubnet"] : [],
   ))
+
+  # ----- CAE gating (mirror Bicep main.bicep:deployCae) -----
+  # CAE is needed when EITHER the user opts in (container_apps_env.deploy) OR
+  # the OTel collector is enabled (otel_collector.deploy). OTel-only callers
+  # get a public CAE (no VNet injection) per Bicep.
+  cae_user_deploy = coalesce(try(local.c.container_apps_env.deploy, false), false)
+  cae_otel_only   = coalesce(try(local.c.otel_collector.deploy, false), false)
+  deploy_cae      = local.cae_user_deploy || local.cae_otel_only
 }
 
 data "azurerm_client_config" "current" {}

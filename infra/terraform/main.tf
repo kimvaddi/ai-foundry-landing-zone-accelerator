@@ -289,15 +289,49 @@ module "app_gateway" {
 }
 
 module "container_apps_env" {
-  count                          = coalesce(try(local.c.container_apps_env.deploy, false), false) ? 1 : 0
-  source                         = "./modules/compute/cae"
-  base_name                      = local.base_name
+  count                 = local.deploy_cae ? 1 : 0
+  source                = "./modules/compute/cae"
+  base_name             = local.base_name
+  location              = var.location
+  resource_group_name   = azurerm_resource_group.platform.name
+  workspace_resource_id = module.foundation.workspace_resource_id
+  # When CAE is deployed solely for OTel (not via container_apps_env.deploy), skip VNet injection — OTel only needs CAE as a host.
+  infrastructure_subnet_id       = local.cae_user_deploy ? module.spoke_network.subnet_ids["ContainerAppEnvironmentSubnet"] : null
+  internal_load_balancer_enabled = local.cae_user_deploy ? var.container_apps_env_internal : false
+  tags                           = local.tags
+}
+
+# OTel Collector — opt-in via components.otel_collector.deploy.
+# Mirrors infra/bicep/main.bicep:otelCollector. Hosted on the shared CAE above.
+module "otel_collector" {
+  count                          = local.cae_otel_only || coalesce(try(local.c.otel_collector.deploy, false), false) ? 1 : 0
+  source                         = "./modules/otel-collector"
+  name                           = "ca-otel-${local.base_name}"
   location                       = var.location
   resource_group_name            = azurerm_resource_group.platform.name
-  workspace_resource_id          = module.foundation.workspace_resource_id
-  infrastructure_subnet_id       = module.spoke_network.subnet_ids["ContainerAppEnvironmentSubnet"]
-  internal_load_balancer_enabled = var.container_apps_env_internal
+  environment_id                 = module.container_apps_env[0].id
+  app_insights_connection_string = module.foundation.app_insights_connection_string
+  secondary_otlp_endpoint        = var.otel_secondary_endpoint
+  min_replicas                   = 0
+  max_replicas                   = 3
   tags                           = local.tags
+
+  depends_on = [module.container_apps_env]
+}
+
+# Notifications Logic App — opt-in via deploy_notifications.
+# Mirrors infra/bicep/main.bicep:notifications. Workflow ships in Disabled
+# state unless enable_notifications_logic_app = true.
+module "notifications" {
+  count               = var.deploy_notifications ? 1 : 0
+  source              = "./modules/notifications"
+  name                = "logic-notif-${local.base_name}"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.platform.name
+  enabled             = var.enable_notifications_logic_app
+  teams_webhook_url   = var.teams_webhook_url
+  notification_emails = var.notification_emails
+  tags                = local.tags
 }
 
 # Observability stack — workbooks + 1-2 scheduled query alerts + optional action group
