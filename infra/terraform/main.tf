@@ -37,13 +37,16 @@ resource "azurerm_resource_group" "foundry" {
   tags     = local.tags
 }
 
-# Foundation (LAW + AppI + KV + DCE/DCR)
+# Foundation (LAW + AppI + KV + KV PE)
 module "foundation" {
-  source              = "./modules/foundation"
-  base_name           = local.base_name
-  location            = var.location
-  resource_group_name = azurerm_resource_group.platform.name
-  tags                = local.tags
+  source                 = "./modules/foundation"
+  base_name              = local.base_name
+  location               = var.location
+  resource_group_name    = azurerm_resource_group.platform.name
+  resource_group_id      = azurerm_resource_group.platform.id
+  pe_subnet_id           = module.spoke_network.subnet_ids["PrivateEndpointSubnet"]
+  kv_private_dns_zone_id = try(module.private_dns.zone_ids["vaultcore"], null)
+  tags                   = local.tags
 }
 
 # Spoke VNet + subnet catalog + NSGs (always)
@@ -97,6 +100,7 @@ module "foundry_stack" {
   create_account_capability_host = var.create_foundry_capability_host
   pe_subnet_resource_id          = module.spoke_network.subnet_ids["PrivateEndpointSubnet"]
   create_private_endpoints       = true
+  workspace_resource_id          = module.foundation.workspace_resource_id
   tags                           = local.tags
 }
 
@@ -261,23 +265,52 @@ module "container_apps_env" {
   tags                           = local.tags
 }
 
-# Observability stack
+# Observability stack — workbooks + 1-2 scheduled query alerts + optional action group
 module "observability" {
   source                = "./modules/observability"
   base_name             = local.base_name
   location              = var.location
   resource_group_name   = azurerm_resource_group.platform.name
   workspace_resource_id = module.foundation.workspace_resource_id
-  app_insights_id       = module.foundation.app_insights_id
+  deploy_notifications  = var.deploy_notifications
+  deploy_cost_alert     = var.deploy_cost_alert
   tags                  = local.tags
 }
 
-# FinOps custom tables + DCRs (always)
+###############################################################################
+# VNet + NSG diagnostic settings (mirrors Bicep spoke-vnet.bicep AVM
+# diagnosticSettings blocks). Created at the root level — NOT inside the
+# spoke-network module — to avoid a module dep cycle (foundation depends
+# on spoke-network subnets; spoke-network would depend on foundation
+# workspace).
+###############################################################################
+resource "azurerm_monitor_diagnostic_setting" "spoke_vnet_metrics" {
+  name                       = "send-to-law"
+  target_resource_id         = module.spoke_network.vnet_id
+  log_analytics_workspace_id = module.foundation.workspace_resource_id
+
+  enabled_metric {
+    category = "AllMetrics"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "spoke_nsg" {
+  for_each                   = module.spoke_network.nsg_ids
+  name                       = "send-to-law"
+  target_resource_id         = each.value
+  log_analytics_workspace_id = module.foundation.workspace_resource_id
+
+  enabled_log {
+    category_group = "allLogs"
+  }
+}
+
+# FinOps custom tables + 3 DCRs (always) — mirrors Bicep names+schemas
 module "finops" {
   source                = "./modules/finops"
-  base_name             = local.base_name
   location              = var.location
   resource_group_name   = azurerm_resource_group.platform.name
   workspace_resource_id = module.foundation.workspace_resource_id
+  workspace_name        = module.foundation.workspace_name
   tags                  = local.tags
 }

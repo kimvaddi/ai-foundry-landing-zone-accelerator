@@ -42,8 +42,8 @@ variable "environment" {
 }
 
 variable "location" {
-  type        = string
-  default     = "eastus2"
+  type    = string
+  default = "eastus2"
 }
 
 variable "hub_address_space" {
@@ -65,7 +65,7 @@ variable "firewall_management_subnet_cidr" {
 }
 
 variable "tags" {
-  type    = map(string)
+  type = map(string)
   default = {
     workload = "klzfin"
     env      = "prod"
@@ -87,13 +87,13 @@ locals {
     "privatelink.documents.azure.com",
   ]
   pdns_short_keys = {
-    "privatelink.vaultcore.azure.net"          = "vaultcore"
-    "privatelink.openai.azure.com"             = "openai"
-    "privatelink.cognitiveservices.azure.com"  = "cognitiveServices"
-    "privatelink.search.windows.net"           = "search"
-    "privatelink.blob.core.windows.net"        = "blob"
-    "privatelink.azure-api.net"                = "apim"
-    "privatelink.documents.azure.com"          = "cosmosSql"
+    "privatelink.vaultcore.azure.net"         = "vaultcore"
+    "privatelink.openai.azure.com"            = "openai"
+    "privatelink.cognitiveservices.azure.com" = "cognitiveServices"
+    "privatelink.search.windows.net"          = "search"
+    "privatelink.blob.core.windows.net"       = "blob"
+    "privatelink.azure-api.net"               = "apim"
+    "privatelink.documents.azure.com"         = "cosmosSql"
   }
 }
 
@@ -144,12 +144,12 @@ resource "azurerm_public_ip" "firewall_management" {
 }
 
 resource "azurerm_firewall_policy" "this" {
-  name                = "fwpol-${local.name_suffix}"
-  resource_group_name = azurerm_resource_group.hub.name
-  location            = azurerm_resource_group.hub.location
-  sku                 = "Basic"
+  name                     = "fwpol-${local.name_suffix}"
+  resource_group_name      = azurerm_resource_group.hub.name
+  location                 = azurerm_resource_group.hub.location
+  sku                      = "Basic"
   threat_intelligence_mode = "Alert"
-  tags                = var.tags
+  tags                     = var.tags
 }
 
 resource "azurerm_firewall" "this" {

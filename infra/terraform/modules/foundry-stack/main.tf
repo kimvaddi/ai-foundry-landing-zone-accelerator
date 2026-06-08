@@ -71,6 +71,11 @@ variable "create_private_endpoints" {
   type    = bool
   default = false
 }
+variable "workspace_resource_id" {
+  type        = string
+  default     = null
+  description = "LAW resource ID for the Foundry account diagnostic setting. When supplied, a `send-to-law` diag setting (RequestResponse + AllMetrics) is created on the account."
+}
 variable "tags" {
   type    = map(string)
   default = null
@@ -219,3 +224,28 @@ output "account_id" { value = module.ptn.ai_foundry_id }
 output "account_name" { value = local.account_name }
 output "account_endpoint" { value = "https://${local.account_name}.cognitiveservices.azure.com/" }
 output "project_ids" { value = local.all_project_ids }
+
+# -----------------------------------------------------------------------------
+# Foundry account diagnostic setting — mirrors Bicep diagnosticSettings on
+# the account (RequestResponse audit + AllMetrics → LAW).
+# -----------------------------------------------------------------------------
+resource "azurerm_monitor_diagnostic_setting" "foundry_account" {
+  count                      = var.workspace_resource_id == null ? 0 : 1
+  name                       = "send-to-law"
+  target_resource_id         = module.ptn.ai_foundry_id
+  log_analytics_workspace_id = var.workspace_resource_id
+
+  enabled_log {
+    category = "Audit"
+  }
+  enabled_log {
+    category = "RequestResponse"
+  }
+  enabled_log {
+    category = "Trace"
+  }
+
+  enabled_metric {
+    category = "AllMetrics"
+  }
+}

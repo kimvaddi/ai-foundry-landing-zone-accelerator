@@ -403,3 +403,13 @@ variable "apim_product_tokens_per_minute" {
   description = "Per-product TPM cap for the APIM `foundry-default` product. Templated into product-token-limit.xml."
 }
 
+###############################################################################
+# Observability — alert toggles
+###############################################################################
+
+variable "deploy_cost_alert" {
+  type        = bool
+  default     = false
+  description = "Deploy the cost-vs-quota scheduled query alert. Requires APIM + AI Gateway logging (ApiManagementGatewayLlmLog table) to exist; smoke blueprint leaves it off because the LAW table only appears after the first APIM AI request."
+}
+

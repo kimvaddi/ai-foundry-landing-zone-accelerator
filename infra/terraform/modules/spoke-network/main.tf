@@ -321,3 +321,4 @@ output "vnet_name" { value = azurerm_virtual_network.spoke.name }
 output "subnet_ids" { value = { for k, s in azurerm_subnet.this : k => s.id } }
 output "subnet_cidrs" { value = { for k, v in local.enabled_subnets : k => v.cidr } }
 output "apim_pip_id" { value = length(azurerm_public_ip.apim) > 0 ? azurerm_public_ip.apim[0].id : null }
+output "nsg_ids" { value = { for k, n in azurerm_network_security_group.subnet_nsg : k => n.id } }
